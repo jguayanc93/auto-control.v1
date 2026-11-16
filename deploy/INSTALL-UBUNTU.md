@@ -8,7 +8,7 @@ Usa tu usuario normal (con `sudo`), **no** `root`.
 ```
 Celular / PC ──HTTPS──> Apache (proyecto.TU-DOMINIO)
                           ├─ /      → /var/www/autocontrol/frontend   (pantallas)
-                          └─ /api/  → 127.0.0.1:3100  → Node 24 (PM2) → PostgreSQL 16 (solo local)
+                          └─ /api/  → 127.0.0.1:3005  → Node 24 (PM2) → PostgreSQL 16 (solo local)
 ```
 
 Cambia en todos los comandos:
@@ -33,11 +33,11 @@ curl -s https://ifconfig.me ; echo
 # Sitios que ya sirve Apache (para no chocar con ninguno)
 sudo apache2ctl -S
 
-# Los puertos 3100 (API) y 5432 (PostgreSQL) deben estar libres: no debe salir nada
-sudo ss -ltnp | grep -E ':3100|:5432'
+# Los puertos 3005 (API) y 5432 (PostgreSQL) deben estar libres: no debe salir nada
+sudo ss -ltnp | grep -E ':3005|:5432'
 ```
 
-Si el puerto 3100 está ocupado, elige otro (por ejemplo 3110) y úsalo en el paso 5 (`PORT`) y en el paso 7.
+Si el puerto 3005 está ocupado, elige otro (por ejemplo 3015) y úsalo en el paso 5 (`PORT`) y en el paso 7.
 
 ---
 
@@ -119,7 +119,7 @@ En `nano` completa:
 
 - `DATABASE_URL=postgresql://autocontrol:CLAVE_BD@localhost:5432/autocontrol?schema=public`
 - `JWT_SECRET=` el texto que generó `openssl`
-- `PORT=3100` (u otro si estaba ocupado)
+- `PORT=3005` (u otro si estaba ocupado)
 
 Guardar: `Ctrl+O`, `Enter`, salir: `Ctrl+X`.
 
@@ -167,7 +167,7 @@ npm run superadmin -- --list
 sudo a2enmod proxy proxy_http headers
 sudo cp /var/www/autocontrol/deploy/apache/autocontrol.conf /etc/apache2/sites-available/autocontrol.conf
 sudo nano /etc/apache2/sites-available/autocontrol.conf
-#   → cambia proyecto.TU-DOMINIO (y 3100 si usaste otro puerto)
+#   → cambia proyecto.TU-DOMINIO (y 3005 si usaste otro puerto)
 sudo a2ensite autocontrol
 sudo apache2ctl configtest        # debe decir: Syntax OK
 sudo systemctl reload apache2

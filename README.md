@@ -55,6 +55,14 @@ Los superadmins no vienen en el seed: se crean con `npm run superadmin` (ver aba
 | `npm run superadmin -- --username usuario --reset-password` | Restablece la contraseña de un superadmin |
 | `npm run superadmin -- --list` | Lista los superadmins |
 
+## Servidor (Ubuntu + Apache)
+
+Guía completa: [deploy/INSTALL-UBUNTU.md](deploy/INSTALL-UBUNTU.md). Publicar una nueva versión:
+
+```bash
+cd /var/www/autocontrol && ./deploy/deploy.sh
+```
+
 ## Convenciones
 - Toda tabla de negocio tiene `org_id`. Los servicios **siempre** filtran por `req.ctx.orgId`, que se toma de la sesión y nunca del body.
 - Toda acción que modifica datos llama a `audit()` (en `src/lib/audit.js`) **dentro de la misma transacción**.

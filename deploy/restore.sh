@@ -5,6 +5,7 @@
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PM2="${PM2_BIN:-$(command -v pm2 || echo pm2)}"
 FILE="${1:-}"
 if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
   echo "Uso: $0 <archivo.dump>" >&2
@@ -25,11 +26,11 @@ echo "▶ Respaldo de seguridad del estado actual…"
 "$APP_DIR/deploy/backup.sh"
 
 echo "▶ Deteniendo la API…"
-pm2 stop autocontrol-api >/dev/null 2>&1 || true
+"$PM2" stop autocontrol-api >/dev/null 2>&1 || true
 
 echo "▶ Restaurando…"
 pg_restore --clean --if-exists --no-owner --single-transaction --dbname="$DB_URL" "$FILE"
 
 echo "▶ Iniciando la API…"
-pm2 start autocontrol-api >/dev/null 2>&1 || "$APP_DIR/deploy/deploy.sh"
+"$PM2" start autocontrol-api >/dev/null 2>&1 || "$APP_DIR/deploy/deploy.sh"
 echo "✔ Restauración completa"

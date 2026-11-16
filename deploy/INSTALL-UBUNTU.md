@@ -37,7 +37,26 @@ sudo apache2ctl -S
 sudo ss -ltnp | grep -E ':3005|:5432'
 ```
 
-Si el puerto 3005 está ocupado, elige otro (por ejemplo 3015) y úsalo en el paso 5 (`PORT`) y en el paso 7.
+Si el puerto 3005 está ocupado, elige otro (por ejemplo 3015) y úsalo en el paso 4 (`PORT`) y en el paso 7.
+
+### Si el servidor ya tiene otros proyectos con PM2
+
+PM2 guarda una lista de procesos **por usuario de Linux**. AUTO-CONTROL se agrega con el **mismo usuario**
+que ya administra tus otros proyectos (así aparecen todos juntos y se levantan juntos al reiniciar).
+
+```bash
+whoami                                   # usuario con el que estás conectado
+ps -eo user,cmd | grep "[P]M2 v"         # usuario dueño del PM2 que ya corre (debe ser el mismo)
+which pm2 ; pm2 -v
+pm2 ls                                   # tus proyectos actuales (no deben aparecer vacíos)
+systemctl list-units --type=service | grep -i pm2    # ¿ya arranca solo al reiniciar? (pm2-<usuario>.service)
+```
+
+- Si `pm2 ls` sale **vacío** pero sabes que hay proyectos corriendo, estás con otro usuario:
+  conéctate con el usuario que muestra `ps` (o usa `sudo -iu ESE_USUARIO`) y sigue la guía con él.
+- No se instala otro PM2: se usa el que ya tienes. Cada app usa su propio Node
+  (tus proyectos siguen con Node 20; AUTO-CONTROL usa Node 24).
+- Los scripts solo reinician `autocontrol-api`; nunca tocan tus otros procesos.
 
 ---
 
@@ -85,11 +104,15 @@ node -v                 # → v24.x
 
 > `nvm install` no reemplaza el Node 20 del sistema (`/usr/bin/node`); las otras apps siguen igual.
 
-PM2 (si el servidor **ya** usa PM2 para otras apps, salta este comando y usa el que ya tienes):
+PM2: el servidor **ya lo tiene** (paso 0), no se instala otro. Solo si `which pm2` no mostró nada:
 
 ```bash
 which pm2 || npm install -g pm2
 ```
+
+> Si tu PM2 se instaló con otra versión de Node de nvm, después de `nvm use 24` el comando `pm2`
+> podría "desaparecer". `deploy.sh` lo ubica antes de cambiar de versión; si aun así no lo encuentra:
+> `PM2_BIN=/ruta/que/mostró/which/pm2 ./deploy/deploy.sh`
 
 ---
 
@@ -135,13 +158,22 @@ cd /var/www/autocontrol
 Hace: `git pull` → `npm ci` → crea las tablas (migraciones) → inicia la API con PM2.
 Debe terminar con **✔ AUTO-CONTROL actualizado**.
 
-Que PM2 levante la app solo al reiniciar el servidor:
+`deploy.sh` ya ejecutó `pm2 save`: la lista guardada ahora incluye tus proyectos **y** AUTO-CONTROL.
 
 ```bash
-pm2 startup systemd
-# ↑ imprime un comando que empieza con "sudo env PATH=…": cópialo y ejecútalo
-pm2 save
+pm2 ls        # tus proyectos + autocontrol-api (online)
 ```
+
+Arranque automático al reiniciar el servidor:
+
+- Si en el paso 0 **ya existía** el servicio `pm2-<usuario>`: no hagas nada más.
+- Si **no existía**:
+
+  ```bash
+  pm2 startup systemd
+  # ↑ imprime un comando que empieza con "sudo env PATH=…": cópialo y ejecútalo
+  pm2 save
+  ```
 
 ---
 

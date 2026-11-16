@@ -1,0 +1,15 @@
+{
+  "name": "AUTO-CONTROL · Gestión de flota",
+  "short_name": "AutoControl",
+  "description": "Pagos diarios, documentos y mantenimientos de tu flota en alquiler.",
+  "lang": "es-PE",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f1f5f9",
+  "theme_color": "#101827",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

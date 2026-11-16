@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>AUTO-CONTROL 1.1 | Gestión de flota</title>
+<style>
+:root{--bg:#f3f6fb;--panel:#fff;--ink:#182235;--muted:#6b778c;--line:#e5eaf1;--nav:#101827;--blue:#2563eb;--green:#15803d;--red:#dc2626;--amber:#b45309}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+header{background:var(--nav);color:white;padding:18px max(18px,calc((100vw - 1180px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-weight:850;letter-spacing:.08em;font-size:20px}.brand small{display:block;color:#9fb0c9;font-size:11px;letter-spacing:.14em;font-weight:600}
+header button{background:#26364d;color:#fff;border:1px solid #40516a;border-radius:10px;padding:9px 12px}
+.wrap{max-width:1180px;margin:24px auto;padding:0 18px 50px}.notice{background:#fff8e6;border:1px solid #f4d58b;color:#75450b;padding:11px 14px;border-radius:12px;font-size:13px;margin-bottom:18px}
+nav{display:flex;gap:8px;overflow:auto;padding-bottom:14px}nav button{white-space:nowrap;border:1px solid var(--line);background:white;border-radius:10px;padding:10px 14px;color:#45536a;font-weight:650}nav button.active{background:var(--blue);border-color:var(--blue);color:white}
+h1{font-size:25px;margin:6px 0 4px}h2{font-size:18px;margin:0 0 14px}.muted{color:var(--muted)}.small{font-size:12px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}.card,.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:17px;box-shadow:0 2px 8px #15233a08}.metric{font-size:27px;font-weight:800;margin-top:7px}.metric-label{font-size:13px;color:var(--muted)}
+.panel{margin:14px 0}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+button,.btn{cursor:pointer;font:inherit}.primary{background:var(--blue);color:white;border:0;border-radius:10px;padding:10px 14px;font-weight:700}.secondary{background:white;border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--ink)}.danger{color:var(--red);border-color:#fecaca}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--line);vertical-align:middle}th{color:var(--muted);font-weight:700;background:#fafbfd}tr:last-child td{border-bottom:0}.table-wrap{overflow:auto}
+.pill{display:inline-block;padding:4px 8px;border-radius:99px;font-size:11px;font-weight:750;background:#eef2f7;color:#475569}.ok{background:#e9f8ef;color:#166534}.warn{background:#fff4db;color:#92400e}.bad{background:#feecec;color:#991b1b}
+form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}label{display:block;font-size:12px;color:#536176;font-weight:700}input,select,textarea{width:100%;margin-top:5px;border:1px solid #d9e0ea;border-radius:9px;padding:10px;background:white;color:var(--ink);font:inherit}input[type=file]{padding:8px;font-size:12px}textarea{min-height:75px;resize:vertical}.full{grid-column:1/-1}.form-actions{display:flex;gap:8px;justify-content:flex-end;grid-column:1/-1}
+.empty{padding:25px;text-align:center;color:var(--muted)}.actions{display:flex;gap:6px;flex-wrap:wrap}.link{color:var(--blue);text-decoration:none;font-weight:700}.hidden{display:none!important}
+@media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}form{grid-template-columns:1fr}.full,.form-actions{grid-column:1}.wrap{margin:16px auto;padding:0 12px 35px}header{padding:15px 14px}h1{font-size:22px}th,td{padding:9px 7px}}
+@media(max-width:390px){.cards{gap:8px}.card{padding:12px}.metric{font-size:22px}}
+</style>
+</head>
+<body>
+<header><div class="brand">AUTO-CONTROL<small>GESTIÓN DE VEHÍCULOS EN ALQUILER</small></div><button id="backupBtn">Exportar respaldo</button></header>
+<div class="wrap">
+<div class="notice"><b>Versión inicial local:</b> la información se guarda en este navegador y dispositivo. Todavía no se sincroniza automáticamente entre tu computadora y tu celular. Exporta respaldos con frecuencia.</div>
+<nav id="nav">
+<button class="active" data-tab="inicio">▦ Inicio</button><button data-tab="vehiculos">🚗 Vehículos</button><button data-tab="documentos">▤ Documentos</button><button data-tab="pagos">S/ Pagos diarios</button><button data-tab="mantenimientos">🔧 Mantenimientos</button>
+</nav>
+<main id="app"></main>
+</div>
+<script>
+const KEY='autocontrol_v1';
+let db=JSON.parse(localStorage.getItem(KEY)||'{"vehicles":[],"docs":[],"payments":[],"services":[]}');
+let tab='inicio';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>'S/ '+Number(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
+const today=()=>new Date().toISOString().slice(0,10);
+const save=()=>localStorage.setItem(KEY,JSON.stringify(db));
+const days=(a,b)=>Math.max(0,Math.floor((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000)+1);
+const vehicle=id=>db.vehicles.find(v=>v.id===id);
+function statusDate(d){if(!d)return '<span class="pill">Sin fecha</span>';let diff=Math.ceil((new Date(d+'T23:59:59')-new Date())/86400000);return diff<0?'<span class="pill bad">Vencido</span>':diff<=30?'<span class="pill warn">Por vencer</span>':'<span class="pill ok">Vigente</span>'}
+function heading(title,sub,button=''){return `<div class="toolbar"><div><h1>${title}</h1><div class="muted small">${sub}</div></div>${button}</div>`}
+function render(){
+$('#nav').querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+const root=$('#app');
+if(tab==='inicio'){
+let due=db.docs.filter(d=>d.expiry && d.expiry<=new Date(Date.now()+30*86400000).toISOString().slice(0,10)).length;
+let income=db.payments.filter(p=>p.date?.slice(0,7)===today().slice(0,7)).reduce((s,p)=>s+Number(p.amount),0);
+let accrued=db.vehicles.reduce((s,v)=>s+Number(v.rate||0)*days(v.start||today(),today()),0);
+root.innerHTML=heading('Panel principal','Resumen de tu operación')+`<section class="cards">
+<div class="card"><div class="metric-label">Vehículos registrados</div><div class="metric">${db.vehicles.length}/10</div></div>
+<div class="card"><div class="metric-label">Cobros registrados este mes</div><div class="metric">${money(income)}</div></div>
+<div class="card"><div class="metric-label">Documentos vencidos / próximos</div><div class="metric">${due}</div></div>
+<div class="card"><div class="metric-label">Alquiler diario esperado</div><div class="metric">${money(db.vehicles.reduce((s,v)=>s+Number(v.rate||0),0))}</div></div></section>
+<div class="panel"><h2>Documentos que requieren atención</h2>${db.docs.filter(d=>d.expiry && d.expiry<=new Date(Date.now()+30*86400000).toISOString().slice(0,10)).length?`<div class="table-wrap"><table><tr><th>Vehículo</th><th>Documento</th><th>Vence</th><th>Estado</th></tr>${db.docs.filter(d=>d.expiry && d.expiry<=new Date(Date.now()+30*86400000).toISOString().slice(0,10)).map(d=>`<tr><td>${esc(vehicle(d.vehicleId)?.plate||'—')}</td><td>${esc(d.type)}</td><td>${esc(d.expiry)}</td><td>${statusDate(d.expiry)}</td></tr>`).join('')}</table></div>`:'<div class="empty">No hay documentos próximos a vencer registrados.</div>'}</div>
+<div class="panel"><h2>Vehículos en alquiler</h2>${vehicleTable()}</div>`;
+}
+if(tab==='vehiculos')root.innerHTML=heading('Vehículos','Registra hasta 10 automóviles','<button class="primary" id="addVehicle">+ Nuevo vehículo</button>')+`<div class="panel" id="formPanel" hidden></div><div class="panel">${vehicleTable()}</div>`;
+if(tab==='documentos')root.innerHTML=heading('Documentación','Guarda PDF, JPG o PNG y controla vencimientos','<button class="primary" id="addDoc">+ Cargar documento</button>')+`<div class="panel" id="formPanel" hidden></div><div class="panel">${docsTable()}</div>`;
+if(tab==='pagos')root.innerHTML=heading('Pagos diarios','Registra cada cobro y consulta saldos','<button class="primary" id="addPayment">+ Registrar pago</button>')+`<div class="panel" id="formPanel" hidden></div><div class="panel"><h2>Resumen de alquiler acumulado</h2>${balancesTable()}<p class="muted small">Estimación desde la fecha de inicio registrada hasta hoy, inclusive. Ajusta el cálculo si hubo días sin alquiler.</p></div><div class="panel"><h2>Historial de pagos recibidos</h2>${paymentsTable()}</div>`;
+if(tab==='mantenimientos')root.innerHTML=heading('Mantenimientos','Historial de servicios, kilometraje y gastos','<button class="primary" id="addService">+ Registrar mantenimiento</button>')+`<div class="panel" id="formPanel" hidden></div><div class="panel">${servicesTable()}</div>`;
+bindActions();
+}
+function vehicleTable(){if(!db.vehicles.length)return '<div class="empty">Todavía no hay vehículos. Selecciona “Nuevo vehículo” para comenzar.</div>';return `<div class="table-wrap"><table><tr><th>Placa</th><th>Vehículo</th><th>Arrendatario</th><th>Tarifa diaria</th><th>Inicio</th><th></th></tr>${db.vehicles.map(v=>`<tr><td><b>${esc(v.plate)}</b></td><td>${esc(v.brand)} ${esc(v.model)} ${esc(v.year)}</td><td>${esc(v.renter||'—')}</td><td>${money(v.rate)}</td><td>${esc(v.start||'—')}</td><td><button class="secondary danger" data-del="vehicle" data-id="${v.id}">Eliminar</button></td></tr>`).join('')}</table></div>`}
+function docsTable(){if(!db.docs.length)return '<div class="empty">Aún no hay documentos cargados.</div>';return `<div class="table-wrap"><table><tr><th>Vehículo</th><th>Documento</th><th>Vencimiento</th><th>Archivo</th><th></th></tr>${db.docs.map(d=>`<tr><td>${esc(vehicle(d.vehicleId)?.plate||'—')}</td><td>${esc(d.type)}</td><td>${esc(d.expiry||'—')} ${statusDate(d.expiry)}</td><td>${d.data?`<a class="link" download="${esc(d.fileName)}" href="${d.data}">Ver / descargar</a>`:esc(d.fileName||'—')}</td><td><button class="secondary danger" data-del="doc" data-id="${d.id}">Eliminar</button></td></tr>`).join('')}</table></div>`}
+function balancesTable(){if(!db.vehicles.length)return '<div class="empty">Registra un vehículo para calcular el alquiler.</div>';return `<div class="table-wrap"><table><tr><th>Vehículo</th><th>Días</th><th>Tarifa / día</th><th>Alquiler acumulado</th><th>Pagado</th><th>Saldo estimado</th></tr>${db.vehicles.map(v=>{let n=days(v.start||today(),today()),due=n*Number(v.rate||0),paid=db.payments.filter(p=>p.vehicleId===v.id).reduce((a,p)=>a+Number(p.amount||0),0),bal=due-paid;return `<tr><td><b>${esc(v.plate)}</b></td><td>${n}</td><td>${money(v.rate)}</td><td>${money(due)}</td><td>${money(paid)}</td><td><b class="${bal>0?'':'muted'}">${money(bal)}</b></td></tr>`}).join('')}</table></div>`}
+function paymentsTable(){if(!db.payments.length)return '<div class="empty">Aún no hay pagos registrados.</div>';return `<div class="table-wrap"><table><tr><th>Fecha</th><th>Vehículo</th><th>Pagador</th><th>Concepto</th><th>Monto</th><th></th></tr>${[...db.payments].sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<tr><td>${esc(p.date)}</td><td>${esc(vehicle(p.vehicleId)?.plate||'—')}</td><td>${esc(p.payer||'—')}</td><td>${esc(p.note||'Alquiler diario')}</td><td><b>${money(p.amount)}</b></td><td><button class="secondary danger" data-del="payment" data-id="${p.id}">Eliminar</button></td></tr>`).join('')}</table></div>`}
+function servicesTable(){if(!db.services.length)return '<div class="empty">Aún no hay mantenimientos registrados.</div>';return `<div class="table-wrap"><table><tr><th>Fecha</th><th>Vehículo</th><th>Servicio</th><th>Kilometraje</th><th>Costo</th><th></th></tr>${db.services.map(s=>`<tr><td>${esc(s.date)}</td><td>${esc(vehicle(s.vehicleId)?.plate||'—')}</td><td>${esc(s.type)}</td><td>${esc(s.km||'—')}</td><td>${money(s.cost)}</td><td><button class="secondary danger" data-del="service" data-id="${s.id}">Eliminar</button></td></tr>`).join('')}</table></div>`}
+function vehicleOptions(){return db.vehicles.map(v=>`<option value="${v.id}">${esc(v.plate)} — ${esc(v.brand)} ${esc(v.model)}</option>`).join('')}
+function showForm(html){let p=$('#formPanel');p.hidden=false;p.innerHTML=html;p.scrollIntoView({behavior:'smooth',block:'start'})}
+function bindActions(){
+$('#addVehicle')?.addEventListener('click',()=>showForm(`<h2>Nuevo vehículo</h2><form id="vehicleForm"><label>Placa<input name="plate" required maxlength="12"></label><label>Marca<input name="brand" required></label><label>Modelo<input name="model" required></label><label>Año<input name="year" type="number" min="1950" max="2100"></label><label>Arrendatario / conductor<input name="renter"></label><label>Teléfono<input name="phone" type="tel"></label><label>Tarifa diaria (S/)<input name="rate" type="number" min="0" step=".01" required></label><label>Inicio del alquiler<input name="start" type="date" value="${today()}"></label><label class="full">Observaciones<textarea name="notes"></textarea></label><div class="form-actions"><button type="button" class="secondary" onclick="render()">Cancelar</button><button class="primary">Guardar vehículo</button></div></form>`));
+$('#addDoc')?.addEventListener('click',()=>showForm(`<h2>Cargar documento</h2>${db.vehicles.length?`<form id="docForm"><label>Vehículo<select name="vehicleId" required>${vehicleOptions()}</select></label><label>Tipo de documento<select name="type"><option>SOAT</option><option>Revisión técnica</option><option>Tarjeta de propiedad</option><option>Contrato de alquiler</option><option>Otro</option></select></label><label>Fecha de vencimiento<input name="expiry" type="date"></label><label>Archivo PDF / JPG / PNG<input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required></label><div class="form-actions"><button type="button" class="secondary" onclick="render()">Cancelar</button><button class="primary">Guardar documento</button></div></form>`:'<p class="muted">Primero registra un vehículo.</p>'}`));
+$('#addPayment')?.addEventListener('click',()=>showForm(`<h2>Registrar pago recibido</h2>${db.vehicles.length?`<form id="paymentForm"><label>Vehículo<select name="vehicleId" required>${vehicleOptions()}</select></label><label>Fecha de pago<input name="date" type="date" value="${today()}" required></label><label>Monto recibido (S/)<input name="amount" type="number" min=".01" step=".01" required></label><label>Pagador<input name="payer"></label><label class="full">Concepto / observación<input name="note" placeholder="Alquiler del día, adelanto, etc."></label><div class="form-actions"><button type="button" class="secondary" onclick="render()">Cancelar</button><button class="primary">Guardar pago</button></div></form>`:'<p class="muted">Primero registra un vehículo.</p>'}`));
+$('#addService')?.addEventListener('click',()=>showForm(`<h2>Registrar mantenimiento</h2>${db.vehicles.length?`<form id="serviceForm"><label>Vehículo<select name="vehicleId">${vehicleOptions()}</select></label><label>Fecha<input name="date" type="date" value="${today()}"></label><label>Tipo de servicio<input name="type" placeholder="Cambio de aceite" required></label><label>Kilometraje<input name="km" type="number" min="0"></label><label>Costo (S/)<input name="cost" type="number" min="0" step=".01"></label><label class="full">Detalle<textarea name="detail"></textarea></label><div class="form-actions"><button type="button" class="secondary" onclick="render()">Cancelar</button><button class="primary">Guardar mantenimiento</button></div></form>`:'<p class="muted">Primero registra un vehículo.</p>'}`));
+document.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('¿Eliminar este registro?'))return;let k={vehicle:'vehicles',doc:'docs',payment:'payments',service:'services'}[b.dataset.del];db[k]=db[k].filter(x=>x.id!==b.dataset.id);save();render()}));
+}
+// Delegación de eventos: los formularios se crean dinámicamente al pulsar sus botones.
+document.addEventListener('submit',async e=>{
+ const form=e.target;
+ if(!['vehicleForm','docForm','paymentForm','serviceForm'].includes(form.id)) return;
+ e.preventDefault();
+ try {
+  if(form.id==='vehicleForm'){
+   let f=Object.fromEntries(new FormData(form));
+   if(db.vehicles.length>=10)return alert('El límite inicial es de 10 vehículos.');
+   if(db.vehicles.some(v=>v.plate.toUpperCase()===f.plate.trim().toUpperCase()))return alert('Ya existe esa placa.');
+   db.vehicles.push({...f,plate:f.plate.trim().toUpperCase(),id:crypto.randomUUID()});
+  } else if(form.id==='docForm'){
+   let f=new FormData(form),file=f.get('file');
+   if(!file || !file.size)return alert('Selecciona un archivo.');
+   if(file.size>2*1024*1024)return alert('Para esta versión local, el archivo debe pesar máximo 2 MB.');
+   let data=await new Promise((res,rej)=>{let r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file)});
+   db.docs.push({id:crypto.randomUUID(),vehicleId:f.get('vehicleId'),type:f.get('type'),expiry:f.get('expiry'),fileName:file.name,data});
+  } else if(form.id==='paymentForm'){
+   let f=Object.fromEntries(new FormData(form));db.payments.push({...f,amount:Number(f.amount),id:crypto.randomUUID()});
+  } else if(form.id==='serviceForm'){
+   let f=Object.fromEntries(new FormData(form));db.services.push({...f,cost:Number(f.cost||0),id:crypto.randomUUID()});
+  }
+  save();render();
+ } catch(err){console.error(err);alert('No se pudo guardar. Tus datos siguen en el formulario; intenta exportar respaldo y avísame.');}
+});
+$('#nav').addEventListener('click',e=>{let b=e.target.closest('button[data-tab]');if(b){tab=b.dataset.tab;render()}});
+$('#backupBtn').addEventListener('click',()=>{let blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='auto-control-respaldo-'+today()+'.json';a.click();URL.revokeObjectURL(a.href)});
+render();
+</script>
+</body></html>

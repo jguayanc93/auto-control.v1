@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101827">
+  <title>AUTO-CONTROL</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <style>body{margin:0;background:#101827}</style>
+  <script type="module">
+    // Decide a dónde ir: panel según el rol, o login si no hay sesión.
+    import { HOME } from '/js/session.js';
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error();
+      const { user } = await res.json();
+      location.replace(HOME[user.role]);
+    } catch {
+      location.replace('/login.html');
+    }
+  </script>
+</head>
+<body></body>
+</html>

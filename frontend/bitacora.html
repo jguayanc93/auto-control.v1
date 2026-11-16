@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <title>Bitácora · AUTO-CONTROL</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <script src="/js/theme.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3/dist/index.global.js"></script>
+  <script type="module" src="/js/pages/bitacora.js"></script>
+</head>
+<body>
+  <main id="page" x-data="page" x-cloak>
+
+    <div class="flex items-end justify-between gap-3">
+      <div>
+        <h1 class="page-title">Bitácora</h1>
+        <p class="page-sub" x-text="user.role === 'superadmin' ? 'Acciones sobre cuentas y negocios de la plataforma.' : 'Quién hizo qué y cuándo en tu negocio.'"></p>
+      </div>
+      <button type="button" class="btn btn-secondary lg:hidden" @click="showFilters = !showFilters">
+        Filtros<span class="pill bg-navy-900 text-white" x-show="activeFilters" x-text="activeFilters"></span></button>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mt-4 grid gap-3 p-4 lg:grid-cols-5" :class="showFilters ? 'grid' : 'hidden lg:grid'">
+      <div>
+        <label class="label" for="f-user">Usuario</label>
+        <select id="f-user" class="input" x-model="filters.userId">
+          <option value="">Todos</option>
+          <template x-for="u in users" :key="u.id"><option :value="u.id" x-text="`${u.name} (${u.username})`"></option></template>
+        </select>
+      </div>
+      <div>
+        <label class="label" for="f-entity">Módulo</label>
+        <select id="f-entity" class="input" x-model="filters.entity">
+          <option value="">Todos</option>
+          <template x-for="m in modules" :key="m[0]"><option :value="m[0]" x-text="m[1]"></option></template>
+        </select>
+      </div>
+      <div>
+        <label class="label" for="f-action">Acción</label>
+        <select id="f-action" class="input" x-model="filters.action">
+          <option value="">Todas</option>
+          <template x-for="(label, key) in ACTION" :key="key"><option :value="key" x-text="label"></option></template>
+        </select>
+      </div>
+      <div>
+        <label class="label" for="f-from">Desde</label>
+        <input id="f-from" type="date" class="input" x-model="filters.from" :max="filters.to || undefined">
+      </div>
+      <div>
+        <label class="label" for="f-to">Hasta</label>
+        <input id="f-to" type="date" class="input" x-model="filters.to" :min="filters.from || undefined">
+      </div>
+      <div class="lg:col-span-5" x-show="activeFilters">
+        <button type="button" class="text-sm font-semibold text-brand-600" @click="clearFilters">Quitar filtros</button>
+      </div>
+    </div>
+
+    <!-- Cargando -->
+    <div class="mt-4 space-y-2" x-show="loading && !items.length">
+      <template x-for="i in 6" :key="i"><div class="card h-16 animate-pulse bg-slate-200/50"></div></template>
+    </div>
+
+    <p class="mt-8 text-center text-sm text-slate-500" x-show="!loading && !items.length">No hay acciones registradas con esos filtros.</p>
+
+    <!-- Lista por día -->
+    <div :class="loading && 'opacity-60'">
+      <template x-for="g in days" :key="g.day">
+        <section class="mt-5">
+          <p class="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500" x-text="g.label"></p>
+          <div class="card divide-y divide-slate-100">
+            <template x-for="e in g.items" :key="e.id">
+              <div>
+                <button type="button" class="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-50" @click="toggle(e)" :aria-expanded="open === e.id">
+                  <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-bold" :class="tone(e)" x-text="initials(e)"></span>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm"><b x-text="who(e)"></b> <span x-text="sentence(e)"></span></p>
+                    <p class="truncate text-xs text-slate-500" x-show="summary(e)" x-text="summary(e)"></p>
+                    <p class="text-[11px] text-slate-400"><span x-text="time(e)"></span> · <span x-text="module(e)"></span></p>
+                  </div>
+                  <span class="mt-2 text-slate-400 transition" :class="open === e.id && 'rotate-90'" x-html="icons.chevron"></span>
+                </button>
+
+                <!-- Detalle -->
+                <div class="bg-slate-50 px-4 pb-3 pt-1" x-show="open === e.id">
+                  <template x-if="rows(e).length">
+                    <dl class="divide-y divide-slate-200/70 rounded-xl border border-slate-200 bg-white text-xs">
+                      <template x-for="r in rows(e)" :key="r.label">
+                        <div class="flex justify-between gap-4 px-3 py-2">
+                          <dt class="shrink-0 text-slate-500" x-text="r.label"></dt>
+                          <dd class="text-right font-medium">
+                            <template x-if="r.diff"><span><span class="text-slate-400 line-through" x-text="r.before"></span> → <span x-text="r.after"></span></span></template>
+                            <template x-if="!r.diff"><span x-text="r.after"></span></template>
+                          </dd>
+                        </div>
+                      </template>
+                    </dl>
+                  </template>
+                  <p class="mt-2 text-[11px] text-slate-400">
+                    <span x-show="e.user" x-text="e.user && `Usuario: ${e.user.username}`"></span>
+                    <span x-show="e.ip" x-text="` · IP: ${e.ip}`"></span>
+                  </p>
+                </div>
+              </div>
+            </template>
+          </div>
+        </section>
+      </template>
+    </div>
+
+    <div class="mt-5 text-center" x-show="nextCursor">
+      <button type="button" class="btn btn-secondary" @click="more" :disabled="loadingMore" x-text="loadingMore ? 'Cargando…' : 'Ver más'"></button>
+    </div>
+    <p class="mt-5 text-center text-xs text-slate-400" x-show="items.length && !nextCursor">No hay más registros.</p>
+
+  </main>
+</body>
+</html>

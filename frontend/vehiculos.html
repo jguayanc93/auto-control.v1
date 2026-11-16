@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <title>Vehículos · AUTO-CONTROL</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <script src="/js/theme.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3/dist/index.global.js"></script>
+  <script type="module" src="/js/pages/vehiculos.js"></script>
+</head>
+<body>
+  <main id="page" x-data="page" x-cloak>
+
+    <!-- Encabezado -->
+    <div class="flex items-end justify-between gap-3">
+      <div>
+        <h1 class="page-title">Vehículos</h1>
+        <p class="page-sub" x-text="tab === 'vehicles' ? `${vehicles.length} vehículo${vehicles.length === 1 ? '' : 's'} en tu flota` : `${renters.length} conductor${renters.length === 1 ? '' : 'es'} registrado${renters.length === 1 ? '' : 's'}`"></p>
+      </div>
+      <button type="button" class="btn btn-primary hidden lg:inline-flex" @click="tab === 'vehicles' ? openVehicleCreate() : openRenterCreate()">
+        <span x-html="icons.plus"></span><span x-text="tab === 'vehicles' ? 'Nuevo vehículo' : 'Nuevo conductor'"></span></button>
+    </div>
+
+    <!-- Pestañas -->
+    <div class="mt-4 flex gap-1 rounded-xl bg-slate-200/70 p-1 text-sm font-semibold lg:max-w-xs">
+      <button type="button" class="flex-1 rounded-lg py-2 transition" :class="tab === 'vehicles' ? 'bg-white shadow-sm' : 'text-slate-500'" @click="tab = 'vehicles'">Vehículos</button>
+      <button type="button" class="flex-1 rounded-lg py-2 transition" :class="tab === 'renters' ? 'bg-white shadow-sm' : 'text-slate-500'" @click="tab = 'renters'">Conductores</button>
+    </div>
+
+    <!-- ═════════════ PESTAÑA VEHÍCULOS ═════════════ -->
+    <section x-show="tab === 'vehicles'">
+      <!-- Resumen -->
+      <div class="mt-4 grid grid-cols-2 gap-2 lg:max-w-md" x-show="vehicles.length">
+        <div class="card px-3 py-2.5"><p class="text-[11px] font-medium text-slate-500">Alquilados</p>
+          <p class="text-lg font-bold" x-text="`${count('alquilado')} de ${vehicles.length}`"></p></div>
+        <a href="/pagos.html" class="card px-3 py-2.5"><p class="text-[11px] font-medium text-slate-500">Días por marcar</p>
+          <p class="text-lg font-bold" :class="pendingTotal > 0 ? 'text-amber-600' : 'text-emerald-600'" x-text="pendingTotal || 'Al día'"></p></a>
+      </div>
+
+      <!-- Búsqueda y filtros -->
+      <div class="mt-3 space-y-2" x-show="vehicles.length">
+        <div class="relative lg:max-w-sm">
+          <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-slate-400" x-html="icons.search"></span>
+          <input type="search" x-model="q" placeholder="Buscar placa, marca o conductor…" class="input pl-10" aria-label="Buscar vehículo">
+        </div>
+        <div class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:px-0">
+          <template x-for="f in FILTERS" :key="f[0]">
+            <button type="button" @click="filter = f[0]" class="shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium transition"
+              :class="filter === f[0] ? 'border-navy-900 bg-navy-900 text-white' : 'border-slate-300 bg-white text-slate-600'">
+              <span x-text="f[1]"></span> <span class="opacity-60" x-text="count(f[0])"></span></button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Cargando -->
+      <div class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3" x-show="loadingVehicles">
+        <template x-for="i in 4"><div class="card h-28 animate-pulse bg-slate-200/50"></div></template>
+      </div>
+
+      <!-- Vacío -->
+      <div class="card mt-4 flex flex-col items-center px-6 py-12 text-center" x-show="!loadingVehicles && !vehicles.length">
+        <span class="flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600" x-html="icons.car"></span>
+        <p class="mt-4 font-semibold">Registra tu primer vehículo</p>
+        <p class="mt-1 max-w-xs text-sm text-slate-500">Luego podrás iniciar su alquiler, registrar pagos, documentos y mantenimientos.</p>
+        <button type="button" class="btn btn-primary mt-5" @click="openVehicleCreate"><span x-html="icons.plus"></span>Nuevo vehículo</button>
+      </div>
+      <p class="mt-6 text-center text-sm text-slate-500" x-show="!loadingVehicles && vehicles.length && !filteredVehicles.length">No hay vehículos que coincidan.</p>
+
+      <!-- Lista -->
+      <div class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3" x-show="!loadingVehicles">
+        <template x-for="v in filteredVehicles" :key="v.id">
+          <button type="button" @click="openVehicle(v)" class="card p-4 text-left transition hover:border-brand-200 active:scale-[.99]"
+            :class="v.status === 'inactivo' && 'opacity-60'">
+            <div class="flex items-start gap-3">
+              <span class="inline-flex shrink-0 flex-col items-center rounded-md border-2 border-slate-800 bg-white px-1.5 pt-0.5 pb-1 leading-none">
+                <span class="text-[7px] font-bold tracking-[.2em] text-slate-500">PERÚ</span>
+                <span class="font-mono text-[15px] font-bold tracking-wider" x-text="fmt.plate(v.plate)"></span>
+              </span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-semibold" x-text="`${v.brand} ${v.model}`"></p>
+                <p class="truncate text-xs text-slate-500" x-text="[v.year, v.color].filter(Boolean).join(' · ') || '—'"></p>
+              </div>
+              <span class="pill shrink-0" :class="VEHICLE_STATUS[v.status].cls" x-text="VEHICLE_STATUS[v.status].label"></span>
+            </div>
+            <template x-if="v.activeRental">
+              <div class="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 text-sm">
+                <div class="min-w-0">
+                  <p class="truncate font-medium" x-text="v.activeRental.renter.fullName"></p>
+                  <p class="text-xs text-slate-500" x-text="`${fmt.money(v.activeRental.dailyRate)} / día`"></p>
+                </div>
+                <span class="pill shrink-0 py-1" :class="fmt.pendingInfo(v.activeRental.pendingDays).tone" x-text="fmt.pendingInfo(v.activeRental.pendingDays).label"></span>
+              </div>
+            </template>
+          </button>
+        </template>
+      </div>
+    </section>
+
+    <!-- ═════════════ PESTAÑA CONDUCTORES ═════════════ -->
+    <section x-show="tab === 'renters'" x-cloak>
+      <div class="relative mt-4 lg:max-w-sm" x-show="renters.length">
+        <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-slate-400" x-html="icons.search"></span>
+        <input type="search" x-model="rq" placeholder="Buscar nombre, DNI o teléfono…" class="input pl-10" aria-label="Buscar conductor">
+      </div>
+
+      <div class="card mt-4 flex flex-col items-center px-6 py-12 text-center" x-show="!loadingRenters && !renters.length">
+        <span class="flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600" x-html="icons.users"></span>
+        <p class="mt-4 font-semibold">Aún no hay conductores</p>
+        <p class="mt-1 max-w-xs text-sm text-slate-500">Se registran aquí o al iniciar el alquiler de un vehículo.</p>
+        <button type="button" class="btn btn-primary mt-5" @click="openRenterCreate"><span x-html="icons.plus"></span>Nuevo conductor</button>
+      </div>
+      <p class="mt-6 text-center text-sm text-slate-500" x-show="!loadingRenters && renters.length && !filteredRenters.length">No hay conductores que coincidan.</p>
+
+      <div class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <template x-for="r in filteredRenters" :key="r.id">
+          <button type="button" @click="openRenter(r)" class="card flex items-center gap-3 p-4 text-left transition hover:border-brand-200 active:scale-[.99]">
+            <span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-slate-100 font-bold text-slate-700" x-text="fmt.initials(r.fullName)"></span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate font-semibold" x-text="r.fullName"></p>
+              <p class="truncate text-xs text-slate-500" x-text="[r.docNumber && `DNI ${r.docNumber}`, r.phone].filter(Boolean).join(' · ') || 'Sin datos de contacto'"></p>
+              <div class="mt-1 flex flex-wrap gap-1">
+                <template x-for="a in r.activeRentals" :key="a.id">
+                  <span class="pill bg-brand-50 font-mono text-brand-700" x-text="fmt.plate(a.vehicle.plate)"></span>
+                </template>
+                <span class="pill bg-slate-100 text-slate-500" x-show="!r.activeRentals.length">Sin alquiler activo</span>
+              </div>
+            </div>
+            <span class="text-slate-400" x-html="icons.chevron"></span>
+          </button>
+        </template>
+      </div>
+    </section>
+
+    <!-- Botón flotante (celular) -->
+    <button type="button" @click="tab === 'vehicles' ? openVehicleCreate() : openRenterCreate()" :aria-label="tab === 'vehicles' ? 'Nuevo vehículo' : 'Nuevo conductor'"
+      class="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 flex size-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 active:scale-95 lg:hidden"
+      x-html="icons.plus"></button>
+
+    <!-- ══════════════════ PANEL: DETALLE DE VEHÍCULO ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'vehicle'" x-cloak @keydown.escape.window="sheet === 'vehicle' && (sheet = null)">
+      <div class="sheet-backdrop" x-show="sheet === 'vehicle'" x-transition.opacity @click="sheet = null"></div>
+      <div class="sheet" x-show="sheet === 'vehicle'" role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <template x-if="vehicle">
+          <div class="flex min-h-0 flex-col">
+            <div class="sheet-header">
+              <span class="inline-flex shrink-0 flex-col items-center rounded-md border-2 border-slate-800 bg-white px-1.5 pt-0.5 pb-1 leading-none">
+                <span class="text-[7px] font-bold tracking-[.2em] text-slate-500">PERÚ</span>
+                <span class="font-mono text-base font-bold tracking-wider" x-text="fmt.plate(vehicle.plate)"></span>
+              </span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-semibold" x-text="`${vehicle.brand} ${vehicle.model}`"></p>
+                <span class="pill" :class="VEHICLE_STATUS[vehicle.status].cls" x-text="VEHICLE_STATUS[vehicle.status].label"></span>
+              </div>
+              <button type="button" class="icon-btn" @click="sheet = null" aria-label="Cerrar" x-html="icons.x"></button>
+            </div>
+
+            <div class="sheet-body space-y-5">
+              <!-- Alquiler activo -->
+              <template x-if="vehicle.activeRental">
+                <div class="rounded-2xl border border-brand-100 bg-brand-50/50 p-4">
+                  <p class="text-xs font-semibold uppercase tracking-wider text-brand-700">Alquiler activo</p>
+                  <div class="mt-2 flex items-center gap-3">
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-lg font-semibold" x-text="vehicle.activeRental.renter.fullName"></p>
+                      <p class="text-sm text-slate-500" x-text="vehicle.activeRental.renter.phone || 'Sin teléfono'"></p>
+                    </div>
+                    <template x-if="vehicle.activeRental.renter.phone">
+                      <div class="flex gap-2">
+                        <a :href="fmt.telLink(vehicle.activeRental.renter.phone)" class="icon-btn border border-slate-200 bg-white" aria-label="Llamar" x-html="icons.phone"></a>
+                        <a :href="fmt.waLink(vehicle.activeRental.renter.phone)" target="_blank" rel="noopener" class="icon-btn border border-slate-200 bg-white text-[#1ebe5a]" aria-label="WhatsApp" x-html="icons.wa"></a>
+                      </div>
+                    </template>
+                  </div>
+
+                  <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div><dt class="text-xs text-slate-500">Tarifa diaria</dt><dd class="font-semibold" x-text="fmt.money(vehicle.activeRental.dailyRate)"></dd></div>
+                    <div><dt class="text-xs text-slate-500">Desde</dt><dd class="font-semibold" x-text="fmt.date(vehicle.activeRental.startDate)"></dd></div>
+                    <div><dt class="text-xs text-slate-500">Días</dt><dd class="font-semibold" x-text="vehicle.activeRental.days"></dd></div>
+                    <div><dt class="text-xs text-slate-500">Cobrado</dt><dd class="font-semibold" x-text="fmt.money(vehicle.activeRental.paid)"></dd></div>
+                    <div><dt class="text-xs text-slate-500">Días marcados</dt><dd class="font-semibold" x-text="vehicle.activeRental.markedDays"></dd></div>
+                    <div><dt class="text-xs text-slate-500">Por marcar</dt><dd class="font-bold" :class="fmt.pendingInfo(vehicle.activeRental.pendingDays).cls" x-text="fmt.pendingInfo(vehicle.activeRental.pendingDays).label"></dd></div>
+                  </dl>
+
+                  <a :href="'/calendario.html?v=' + vehicle.id" class="btn btn-primary btn-block mt-4"><span x-html="icons.calendar"></span>Calendario de cobros</a>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-secondary flex-1" x-show="can('rentals:finish')" @click="openFinish"><span x-html="icons.flag"></span>Finalizar contrato</button>
+                    <button type="button" class="btn btn-secondary" x-show="can('records:edit')" @click="openRentalEdit(vehicle.activeRental)" aria-label="Corregir contrato"><span x-html="icons.edit"></span>Corregir</button>
+                    <button type="button" class="btn btn-danger" x-show="can('records:delete') && vehicle.activeRental.markedDays === 0" @click="deleteRental(vehicle.activeRental)" :disabled="busy" aria-label="Eliminar contrato" x-html="icons.trash"></button>
+                  </div>
+                  <p class="mt-3 text-xs text-slate-500" x-show="!can('records:edit')">Para corregir la tarifa o la fecha del contrato, pídeselo al administrador.</p>
+                </div>
+              </template>
+
+              <!-- Sin alquiler -->
+              <template x-if="!vehicle.activeRental && vehicle.status !== 'inactivo'">
+                <div class="rounded-2xl border border-dashed border-slate-300 p-5 text-center">
+                  <p class="font-semibold">Sin alquiler activo</p>
+                  <p class="mt-1 text-sm text-slate-500">Asigna un conductor y la tarifa diaria.</p>
+                  <button type="button" class="btn btn-primary mt-4 w-full" @click="openRentalCreate"><span x-html="icons.plus"></span>Iniciar alquiler</button>
+                </div>
+              </template>
+              <p class="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600" x-show="vehicle.status === 'inactivo'">
+                Vehículo inactivo. Para alquilarlo, el administrador debe cambiarlo a "Disponible".</p>
+
+              <!-- Accesos -->
+              <div class="grid grid-cols-2 gap-2">
+                <a :href="'/documentos.html?v=' + vehicle.id" class="btn btn-secondary"><span x-html="icons.file"></span>Documentos</a>
+                <a :href="'/mantenimientos.html?v=' + vehicle.id" class="btn btn-secondary"><span x-html="icons.wrench"></span>Mantenimiento</a>
+                <a :href="'/calendario.html?v=' + vehicle.id" class="btn btn-secondary col-span-2" x-show="!vehicle.activeRental"><span x-html="icons.calendar"></span>Calendario</a>
+              </div>
+
+              <!-- Datos -->
+              <div>
+                <p class="mb-2 text-sm font-semibold text-slate-700">Datos del vehículo</p>
+                <dl class="divide-y divide-slate-100 rounded-2xl border border-slate-200 text-sm">
+                  <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Año</dt><dd class="font-medium" x-text="vehicle.year || '—'"></dd></div>
+                  <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Color</dt><dd class="font-medium" x-text="vehicle.color || '—'"></dd></div>
+                  <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Kilometraje</dt><dd class="font-medium" x-text="fmt.km(vehicle.odometer)"></dd></div>
+                  <div class="px-4 py-2.5" x-show="vehicle.notes"><dt class="text-slate-500">Notas</dt><dd class="mt-0.5 whitespace-pre-line" x-text="vehicle.notes"></dd></div>
+                </dl>
+              </div>
+
+              <!-- Historial -->
+              <div>
+                <p class="mb-2 text-sm font-semibold text-slate-700">Historial de contratos</p>
+                <div class="space-y-2" x-show="vehicle.rentals === null">
+                  <div class="h-14 animate-pulse rounded-xl bg-slate-100"></div>
+                </div>
+                <p class="text-sm text-slate-500" x-show="vehicle.rentals && !vehicle.rentals.some(r => r.status === 'finalizado')">Sin contratos anteriores.</p>
+                <div class="space-y-2">
+                  <template x-for="r in (vehicle.rentals || []).filter(r => r.status === 'finalizado')" :key="r.id">
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                      <div class="min-w-0">
+                        <p class="truncate font-medium" x-text="r.renter.fullName"></p>
+                        <p class="text-xs text-slate-500" x-text="`${fmt.date(r.startDate)} – ${fmt.date(r.endDate)} · ${r.days} días · ${fmt.money(r.dailyRate)}/día`"></p>
+                      </div>
+                      <span class="pill shrink-0 bg-slate-100 text-slate-700" x-text="fmt.money(r.paid) + ' cobrado'"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+
+            <div class="sheet-footer" x-show="can('records:edit')">
+              <button type="button" class="btn btn-secondary flex-1" @click="openVehicleEdit"><span x-html="icons.edit"></span>Editar</button>
+              <button type="button" class="btn btn-danger" @click="deleteVehicle" :disabled="busy"><span x-html="icons.trash"></span>Eliminar</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ══════════════════ PANEL: FORMULARIO DE VEHÍCULO ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'vehicleForm'" x-cloak @keydown.escape.window="sheet === 'vehicleForm' && closeSub()">
+      <div class="sheet-backdrop" x-show="sheet === 'vehicleForm'" x-transition.opacity @click="closeSub"></div>
+      <form class="sheet" x-show="sheet === 'vehicleForm'" @submit.prevent="saveVehicle" novalidate role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <div class="sheet-header">
+          <p class="flex-1 text-lg font-semibold" x-text="vMode === 'create' ? 'Nuevo vehículo' : 'Editar vehículo'"></p>
+          <button type="button" class="icon-btn" @click="closeSub" aria-label="Cerrar" x-html="icons.x"></button>
+        </div>
+        <div class="sheet-body grid grid-cols-2 gap-4">
+          <div class="col-span-2">
+            <label class="label" for="v-plate">Placa</label>
+            <input id="v-plate" class="input font-mono uppercase tracking-wider" x-model="vForm.plate" autocapitalize="characters" autocomplete="off" spellcheck="false"
+              placeholder="ABC-123" maxlength="10" :class="fields.plate && 'input-error'">
+            <p class="field-error" x-show="fields.plate" x-text="fields.plate"></p>
+          </div>
+          <div>
+            <label class="label" for="v-brand">Marca</label>
+            <input id="v-brand" class="input" x-model="vForm.brand" placeholder="Toyota" :class="fields.brand && 'input-error'">
+            <p class="field-error" x-show="fields.brand" x-text="fields.brand"></p>
+          </div>
+          <div>
+            <label class="label" for="v-model">Modelo</label>
+            <input id="v-model" class="input" x-model="vForm.model" placeholder="Yaris" :class="fields.model && 'input-error'">
+            <p class="field-error" x-show="fields.model" x-text="fields.model"></p>
+          </div>
+          <div>
+            <label class="label" for="v-year">Año</label>
+            <input id="v-year" class="input" type="number" inputmode="numeric" x-model="vForm.year" placeholder="2020" :class="fields.year && 'input-error'">
+            <p class="field-error" x-show="fields.year" x-text="fields.year"></p>
+          </div>
+          <div>
+            <label class="label" for="v-color">Color</label>
+            <input id="v-color" class="input" x-model="vForm.color" placeholder="Blanco" :class="fields.color && 'input-error'">
+            <p class="field-error" x-show="fields.color" x-text="fields.color"></p>
+          </div>
+          <div class="col-span-2">
+            <label class="label" for="v-odometer">Kilometraje actual <span class="font-normal text-slate-400">(opcional)</span></label>
+            <input id="v-odometer" class="input" type="number" inputmode="numeric" min="0" x-model="vForm.odometer" placeholder="45000" :class="fields.odometer && 'input-error'">
+            <p class="field-error" x-show="fields.odometer" x-text="fields.odometer"></p>
+            <p class="mt-1 text-xs text-slate-500" x-show="!fields.odometer">Se actualiza solo al registrar un mantenimiento con más km.</p>
+          </div>
+          <div class="col-span-2" x-show="vMode === 'edit'">
+            <label class="label" for="v-status">Estado</label>
+            <select id="v-status" class="input" x-model="vForm.status" :disabled="vForm.status === 'alquilado'" :class="fields.status && 'input-error'">
+              <template x-if="vForm.status === 'alquilado'"><option value="alquilado">Alquilado</option></template>
+              <option value="disponible">Disponible</option>
+              <option value="taller">En taller</option>
+              <option value="inactivo">Inactivo (vendido o fuera de servicio)</option>
+            </select>
+            <p class="field-error" x-show="fields.status" x-text="fields.status"></p>
+            <p class="mt-1 text-xs text-slate-500" x-show="vForm.status === 'alquilado'">Para cambiar el estado, primero finaliza el contrato activo.</p>
+          </div>
+          <div class="col-span-2">
+            <label class="label" for="v-notes">Notas <span class="font-normal text-slate-400">(opcional)</span></label>
+            <textarea id="v-notes" class="input h-auto min-h-20 py-2.5" rows="3" x-model="vForm.notes"></textarea>
+          </div>
+        </div>
+        <div class="sheet-footer">
+          <button type="button" class="btn btn-secondary flex-1" @click="closeSub">Cancelar</button>
+          <button class="btn btn-primary flex-1" :disabled="saving" x-text="saving ? 'Guardando…' : (vMode === 'create' ? 'Registrar' : 'Guardar')"></button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ══════════════════ PANEL: INICIAR ALQUILER ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'rentalForm'" x-cloak @keydown.escape.window="sheet === 'rentalForm' && closeSub()">
+      <div class="sheet-backdrop" x-show="sheet === 'rentalForm'" x-transition.opacity @click="closeSub"></div>
+      <form class="sheet" x-show="sheet === 'rentalForm'" @submit.prevent="saveRental" novalidate role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <div class="sheet-header">
+          <div class="flex-1"><p class="text-lg font-semibold">Iniciar alquiler</p>
+            <p class="text-sm text-slate-500" x-text="vehicle ? `${fmt.plate(vehicle.plate)} · ${vehicle.brand} ${vehicle.model}` : ''"></p></div>
+          <button type="button" class="icon-btn" @click="closeSub" aria-label="Cerrar" x-html="icons.x"></button>
+        </div>
+        <div class="sheet-body space-y-4">
+          <div>
+            <p class="label">Conductor</p>
+            <div class="flex gap-1 rounded-xl bg-slate-100 p-1 text-sm font-semibold">
+              <button type="button" class="flex-1 rounded-lg py-2 transition disabled:opacity-40" :disabled="!renters.length"
+                :class="rForm.renterMode === 'existing' ? 'bg-white shadow-sm' : 'text-slate-500'" @click="rForm.renterMode = 'existing'">Ya registrado</button>
+              <button type="button" class="flex-1 rounded-lg py-2 transition" :class="rForm.renterMode === 'new' ? 'bg-white shadow-sm' : 'text-slate-500'" @click="rForm.renterMode = 'new'">Nuevo</button>
+            </div>
+          </div>
+
+          <div x-show="rForm.renterMode === 'existing'">
+            <select class="input" x-model="rForm.renterId" aria-label="Conductor" :class="fields.renterId && 'input-error'">
+              <option value="">Selecciona un conductor…</option>
+              <template x-for="r in renters" :key="r.id">
+                <option :value="r.id" x-text="r.fullName + (r.docNumber ? ` · DNI ${r.docNumber}` : '') + (r.activeRentals.length ? ' (ya tiene alquiler)' : '')"></option>
+              </template>
+            </select>
+            <p class="field-error" x-show="fields.renterId" x-text="fields.renterId"></p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3" x-show="rForm.renterMode === 'new'">
+            <div class="col-span-2">
+              <label class="label" for="n-name">Nombre completo</label>
+              <input id="n-name" class="input" x-model="rForm.newRenter.fullName" autocomplete="off" :class="(fields['newRenter.fullName'] || fields.renterId) && 'input-error'">
+              <p class="field-error" x-show="fields['newRenter.fullName'] || fields.renterId" x-text="fields['newRenter.fullName'] || fields.renterId"></p>
+            </div>
+            <div class="col-span-2">
+              <label class="label" for="n-phone">Celular</label>
+              <input id="n-phone" class="input" type="tel" inputmode="tel" x-model="rForm.newRenter.phone" placeholder="987 654 321" :class="fields['newRenter.phone'] && 'input-error'">
+              <p class="field-error" x-show="fields['newRenter.phone']" x-text="fields['newRenter.phone']"></p>
+            </div>
+            <div>
+              <label class="label" for="n-doc">DNI / CE</label>
+              <input id="n-doc" class="input" inputmode="numeric" x-model="rForm.newRenter.docNumber" :class="fields['newRenter.docNumber'] && 'input-error'">
+            </div>
+            <div>
+              <label class="label" for="n-lic">Licencia</label>
+              <input id="n-lic" class="input" x-model="rForm.newRenter.licenseNumber" autocapitalize="characters">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="label" for="r-rate">Tarifa diaria</label>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-sm font-semibold text-slate-500">S/</span>
+                <input id="r-rate" class="input pl-9" inputmode="decimal" x-model="rForm.dailyRate" placeholder="80.00" :class="fields.dailyRate && 'input-error'">
+              </div>
+              <p class="field-error" x-show="fields.dailyRate" x-text="fields.dailyRate"></p>
+            </div>
+            <div>
+              <label class="label" for="r-start">Fecha de inicio</label>
+              <input id="r-start" class="input" type="date" :max="today" x-model="rForm.startDate" :class="fields.startDate && 'input-error'">
+              <p class="field-error" x-show="fields.startDate" x-text="fields.startDate"></p>
+            </div>
+          </div>
+          <div>
+            <label class="label" for="r-notes">Notas <span class="font-normal text-slate-400">(opcional)</span></label>
+            <textarea id="r-notes" class="input h-auto min-h-16 py-2.5" rows="2" x-model="rForm.notes" placeholder="Ej. garantía de S/ 500, día de pago, etc."></textarea>
+          </div>
+        </div>
+        <div class="sheet-footer">
+          <button type="button" class="btn btn-secondary flex-1" @click="closeSub">Cancelar</button>
+          <button class="btn btn-primary flex-1" :disabled="saving" x-text="saving ? 'Guardando…' : 'Iniciar alquiler'"></button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ══════════════════ PANEL: CORREGIR CONTRATO (admin) ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'rentalEdit'" x-cloak @keydown.escape.window="sheet === 'rentalEdit' && closeSub()">
+      <div class="sheet-backdrop" x-show="sheet === 'rentalEdit'" x-transition.opacity @click="closeSub"></div>
+      <form class="sheet" x-show="sheet === 'rentalEdit'" @submit.prevent="saveRentalEdit" novalidate role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <div class="sheet-header">
+          <div class="flex-1"><p class="text-lg font-semibold">Corregir contrato</p>
+            <p class="text-sm text-slate-500" x-text="editRental?.renter.fullName"></p></div>
+          <button type="button" class="icon-btn" @click="closeSub" aria-label="Cerrar" x-html="icons.x"></button>
+        </div>
+        <div class="sheet-body space-y-4">
+          <p class="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+            <span class="mt-0.5 shrink-0" x-html="icons.alert"></span>Cambiar la tarifa o la fecha de inicio recalcula todo el saldo del contrato. Quedará registrado en la bitácora.</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="label" for="e-rate">Tarifa diaria</label>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-sm font-semibold text-slate-500">S/</span>
+                <input id="e-rate" class="input pl-9" inputmode="decimal" x-model="rForm.dailyRate" :class="fields.dailyRate && 'input-error'">
+              </div>
+              <p class="field-error" x-show="fields.dailyRate" x-text="fields.dailyRate"></p>
+            </div>
+            <div>
+              <label class="label" for="e-start">Fecha de inicio</label>
+              <input id="e-start" class="input" type="date" :max="today" x-model="rForm.startDate" :class="fields.startDate && 'input-error'">
+              <p class="field-error" x-show="fields.startDate" x-text="fields.startDate"></p>
+            </div>
+          </div>
+          <div>
+            <label class="label" for="e-notes">Notas</label>
+            <textarea id="e-notes" class="input h-auto min-h-16 py-2.5" rows="2" x-model="rForm.notes"></textarea>
+          </div>
+        </div>
+        <div class="sheet-footer">
+          <button type="button" class="btn btn-secondary flex-1" @click="closeSub">Cancelar</button>
+          <button class="btn btn-primary flex-1" :disabled="saving" x-text="saving ? 'Guardando…' : 'Guardar'"></button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ══════════════════ PANEL: FINALIZAR CONTRATO (admin) ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'finish'" x-cloak @keydown.escape.window="sheet === 'finish' && closeSub()">
+      <div class="sheet-backdrop" x-show="sheet === 'finish'" x-transition.opacity @click="closeSub"></div>
+      <form class="sheet" x-show="sheet === 'finish'" @submit.prevent="finishRental" novalidate role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <div class="sheet-header">
+          <div class="flex-1"><p class="text-lg font-semibold">Finalizar contrato</p>
+            <p class="text-sm text-slate-500" x-text="vehicle?.activeRental ? `${vehicle.activeRental.renter.fullName} · ${fmt.plate(vehicle.plate)}` : ''"></p></div>
+          <button type="button" class="icon-btn" @click="closeSub" aria-label="Cerrar" x-html="icons.x"></button>
+        </div>
+        <div class="sheet-body space-y-4">
+          <div>
+            <label class="label" for="f-end">Último día de alquiler</label>
+            <input id="f-end" class="input" type="date" :min="vehicle?.activeRental?.startDate" :max="today" x-model="finishDate" :class="fields.endDate && 'input-error'">
+            <p class="field-error" x-show="fields.endDate" x-text="fields.endDate"></p>
+          </div>
+          <template x-if="finishPreview">
+            <dl class="divide-y divide-slate-100 rounded-2xl border border-slate-200 text-sm">
+              <div class="flex justify-between px-4 py-2.5"><dt class="text-slate-500">Días alquilados</dt><dd class="font-medium" x-text="finishPreview.days"></dd></div>
+              <div class="flex justify-between px-4 py-2.5"><dt class="text-slate-500">Cobrado</dt><dd class="font-medium" x-text="fmt.money(vehicle.activeRental.paid)"></dd></div>
+              <div class="flex justify-between px-4 py-3"><dt class="font-semibold">Días sin marcar</dt>
+                <dd class="font-bold" :class="fmt.pendingInfo(finishPreview.pending).cls" x-text="fmt.pendingInfo(finishPreview.pending).label"></dd></div>
+            </dl>
+          </template>
+          <p class="text-xs text-slate-500">El vehículo quedará "Disponible". Los días sin marcar del contrato se pueden marcar después en el calendario.</p>
+        </div>
+        <div class="sheet-footer">
+          <button type="button" class="btn btn-secondary flex-1" @click="closeSub">Cancelar</button>
+          <button class="btn btn-primary flex-1" :disabled="saving" x-text="saving ? 'Guardando…' : 'Finalizar'"></button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ══════════════════ PANEL: DETALLE DE CONDUCTOR ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'renter'" x-cloak @keydown.escape.window="sheet === 'renter' && (sheet = null)">
+      <div class="sheet-backdrop" x-show="sheet === 'renter'" x-transition.opacity @click="sheet = null"></div>
+      <div class="sheet" x-show="sheet === 'renter'" role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <template x-if="renter">
+          <div class="flex min-h-0 flex-col">
+            <div class="sheet-header">
+              <span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-slate-100 font-bold text-slate-700" x-text="fmt.initials(renter.fullName)"></span>
+              <p class="min-w-0 flex-1 truncate text-lg font-semibold" x-text="renter.fullName"></p>
+              <button type="button" class="icon-btn" @click="sheet = null" aria-label="Cerrar" x-html="icons.x"></button>
+            </div>
+            <div class="sheet-body space-y-5">
+              <div class="grid grid-cols-2 gap-2" x-show="renter.phone">
+                <a :href="fmt.telLink(renter.phone)" class="btn btn-secondary"><span x-html="icons.phone"></span>Llamar</a>
+                <a :href="fmt.waLink(renter.phone)" target="_blank" rel="noopener" class="btn bg-[#25D366] text-white hover:bg-[#1ebe5a]"><span x-html="icons.wa"></span>WhatsApp</a>
+              </div>
+              <dl class="divide-y divide-slate-100 rounded-2xl border border-slate-200 text-sm">
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">DNI / CE</dt><dd class="font-medium" x-text="renter.docNumber || '—'"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Celular</dt><dd class="font-medium" x-text="renter.phone || '—'"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Licencia</dt><dd class="font-medium" x-text="renter.licenseNumber || '—'"></dd></div>
+                <div class="px-4 py-2.5" x-show="renter.notes"><dt class="text-slate-500">Notas</dt><dd class="mt-0.5 whitespace-pre-line" x-text="renter.notes"></dd></div>
+              </dl>
+              <div>
+                <p class="mb-2 text-sm font-semibold text-slate-700">Contratos</p>
+                <div class="h-14 animate-pulse rounded-xl bg-slate-100" x-show="renter.rentals === null"></div>
+                <p class="text-sm text-slate-500" x-show="renter.rentals && !renter.rentals.length">Aún no tiene contratos.</p>
+                <div class="space-y-2">
+                  <template x-for="r in renter.rentals || []" :key="r.id">
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                      <div class="min-w-0">
+                        <p class="font-medium"><span class="font-mono" x-text="fmt.plate(r.vehicle.plate)"></span>
+                          <span class="pill ml-1" :class="r.status === 'activo' ? 'bg-brand-50 text-brand-700' : 'bg-slate-100 text-slate-500'" x-text="r.status === 'activo' ? 'Activo' : 'Finalizado'"></span></p>
+                        <p class="text-xs text-slate-500" x-text="`${fmt.date(r.startDate)}${r.endDate ? ' – ' + fmt.date(r.endDate) : ''} · ${fmt.money(r.dailyRate)}/día`"></p>
+                      </div>
+                      <span class="pill shrink-0 bg-slate-100 text-slate-700" x-text="fmt.money(r.paid) + ' cobrado'"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+            <div class="sheet-footer" x-show="can('records:edit')">
+              <button type="button" class="btn btn-secondary flex-1" @click="openRenterEdit"><span x-html="icons.edit"></span>Editar</button>
+              <button type="button" class="btn btn-danger" @click="deleteRenter" :disabled="busy" x-show="renter.rentals && !renter.rentals.length"><span x-html="icons.trash"></span>Eliminar</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ══════════════════ PANEL: FORMULARIO DE CONDUCTOR ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'renterForm'" x-cloak @keydown.escape.window="sheet === 'renterForm' && closeSub()">
+      <div class="sheet-backdrop" x-show="sheet === 'renterForm'" x-transition.opacity @click="closeSub"></div>
+      <form class="sheet" x-show="sheet === 'renterForm'" @submit.prevent="saveRenter" novalidate role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <div class="sheet-header">
+          <p class="flex-1 text-lg font-semibold" x-text="rnMode === 'create' ? 'Nuevo conductor' : 'Editar conductor'"></p>
+          <button type="button" class="icon-btn" @click="closeSub" aria-label="Cerrar" x-html="icons.x"></button>
+        </div>
+        <div class="sheet-body grid grid-cols-2 gap-4">
+          <div class="col-span-2">
+            <label class="label" for="c-name">Nombre completo</label>
+            <input id="c-name" class="input" x-model="rnForm.fullName" autocomplete="off" :class="fields.fullName && 'input-error'">
+            <p class="field-error" x-show="fields.fullName" x-text="fields.fullName"></p>
+          </div>
+          <div class="col-span-2">
+            <label class="label" for="c-phone">Celular</label>
+            <input id="c-phone" class="input" type="tel" inputmode="tel" x-model="rnForm.phone" placeholder="987 654 321" :class="fields.phone && 'input-error'">
+            <p class="field-error" x-show="fields.phone" x-text="fields.phone"></p>
+          </div>
+          <div>
+            <label class="label" for="c-doc">DNI / CE</label>
+            <input id="c-doc" class="input" inputmode="numeric" x-model="rnForm.docNumber" :class="fields.docNumber && 'input-error'">
+            <p class="field-error" x-show="fields.docNumber" x-text="fields.docNumber"></p>
+          </div>
+          <div>
+            <label class="label" for="c-lic">Licencia</label>
+            <input id="c-lic" class="input" x-model="rnForm.licenseNumber" autocapitalize="characters" :class="fields.licenseNumber && 'input-error'">
+            <p class="field-error" x-show="fields.licenseNumber" x-text="fields.licenseNumber"></p>
+          </div>
+          <div class="col-span-2">
+            <label class="label" for="c-notes">Notas <span class="font-normal text-slate-400">(opcional)</span></label>
+            <textarea id="c-notes" class="input h-auto min-h-16 py-2.5" rows="2" x-model="rnForm.notes"></textarea>
+          </div>
+        </div>
+        <div class="sheet-footer">
+          <button type="button" class="btn btn-secondary flex-1" @click="closeSub">Cancelar</button>
+          <button class="btn btn-primary flex-1" :disabled="saving" x-text="saving ? 'Guardando…' : (rnMode === 'create' ? 'Registrar' : 'Guardar')"></button>
+        </div>
+      </form>
+    </div>
+
+  </main>
+</body>
+</html>

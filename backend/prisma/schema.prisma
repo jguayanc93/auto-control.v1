@@ -1,0 +1,380 @@
+// AUTO-CONTROL 2.0 — esquema de base de datos (PostgreSQL)
+// Convenciones:
+//  - Nombres en la BD en snake_case (@map / @@map); en JS en camelCase.
+//  - Todo registro de negocio lleva orgId: los datos de un negocio nunca se mezclan con otro.
+//  - Vehículos, conductores y contratos: solo se eliminan si no tienen historial (si no, se inactivan).
+//    Pagos, documentos y mantenimientos: eliminación lógica con deletedAt.
+//    La bitácora guarda una copia de todo lo eliminado.
+//  - Dinero en Decimal(10,2), fechas de negocio en DATE (hora de Lima).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────── Enums ─────────────
+
+enum Role {
+  superadmin
+  admin
+  operator
+}
+
+enum AccountStatus {
+  active
+  suspended
+}
+
+enum VehicleStatus {
+  disponible
+  alquilado
+  taller
+  inactivo
+}
+
+enum RentalStatus {
+  activo
+  finalizado
+}
+
+enum DayStatus {
+  pagado
+  medio
+  no_pago
+  fuera_servicio
+}
+
+enum ExpenseCategory {
+  mantenimiento
+  servicio
+  accesorio
+  otro
+}
+
+enum PaymentMethod {
+  efectivo
+  yape
+  plin
+  transferencia
+  otro
+}
+
+enum DocumentType {
+  soat
+  revision_tecnica
+  tarjeta_propiedad
+  tarjeta_circulacion
+  revision_chip_gas
+  revision_quinquenal_gas
+  contrato
+  licencia
+  otro
+}
+
+enum AuditAction {
+  login
+  login_failed
+  logout
+  create
+  update
+  delete
+  suspend
+  activate
+  password_change
+  password_reset
+}
+
+// ───────────── Cuentas ─────────────
+
+/// Un negocio. Lo crea el superadmin junto con su administrador.
+model Organization {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @db.VarChar(120)
+  status       AccountStatus @default(active)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  users        User[]
+  vehicles     Vehicle[]
+  renters      Renter[]
+  rentals      Rental[]
+  dailyRecords DailyRecord[]
+  expenses     Expense[]
+  documents    Document[]
+  maintenances Maintenance[]
+  auditLogs    AuditLog[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String        @id @default(uuid()) @db.Uuid
+  /// Usuario para iniciar sesión (minúsculas: letras, números, punto, guion)
+  username       String        @unique @db.VarChar(30)
+  /// Opcional. También sirve para iniciar sesión.
+  email          String?       @unique @db.VarChar(160)
+  passwordHash   String        @map("password_hash") @db.VarChar(100)
+  name           String        @db.VarChar(120)
+  role           Role
+  /// null solo para el superadmin
+  orgId          String?       @map("org_id") @db.Uuid
+  status         AccountStatus @default(active)
+  /// Se incrementa al cambiar/resetear contraseña o suspender: invalida sesiones abiertas.
+  sessionVersion Int           @default(0) @map("session_version")
+  createdById    String?       @map("created_by") @db.Uuid
+  lastLoginAt    DateTime?     @map("last_login_at") @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  org       Organization? @relation(fields: [orgId], references: [id])
+  createdBy User?         @relation("UserCreatedBy", fields: [createdById], references: [id])
+  created   User[]        @relation("UserCreatedBy")
+
+  vehiclesCreated     Vehicle[]     @relation("VehicleCreatedBy")
+  rentersCreated      Renter[]      @relation("RenterCreatedBy")
+  rentalsCreated      Rental[]      @relation("RentalCreatedBy")
+  dailyRecordsCreated DailyRecord[] @relation("DailyRecordCreatedBy")
+  expensesCreated     Expense[]     @relation("ExpenseCreatedBy")
+  documentsCreated    Document[]    @relation("DocumentCreatedBy")
+  maintenancesCreated Maintenance[] @relation("MaintenanceCreatedBy")
+  auditLogs           AuditLog[]
+
+  @@index([orgId])
+  @@map("users")
+}
+
+// ───────────── Flota ─────────────
+
+model Vehicle {
+  id          String        @id @default(uuid()) @db.Uuid
+  orgId       String        @map("org_id") @db.Uuid
+  plate       String        @db.VarChar(12)
+  brand       String        @db.VarChar(60)
+  model       String        @db.VarChar(60)
+  year        Int?
+  color       String?       @db.VarChar(30)
+  /// Kilometraje actual (sube solo al registrar un mantenimiento con más km)
+  odometer    Int?
+  status      VehicleStatus @default(disponible)
+  notes       String?
+  createdById String?       @map("created_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  org          Organization  @relation(fields: [orgId], references: [id])
+  createdBy    User?         @relation("VehicleCreatedBy", fields: [createdById], references: [id])
+  rentals      Rental[]
+  dailyRecords DailyRecord[]
+  expenses     Expense[]
+  documents    Document[]
+  maintenances Maintenance[]
+
+  @@unique([orgId, plate])
+  @@map("vehicles")
+}
+
+/// Arrendatario / conductor
+model Renter {
+  id            String    @id @default(uuid()) @db.Uuid
+  orgId         String    @map("org_id") @db.Uuid
+  fullName      String    @map("full_name") @db.VarChar(120)
+  docNumber     String?   @map("doc_number") @db.VarChar(20)
+  phone         String?   @db.VarChar(20)
+  licenseNumber String?   @map("license_number") @db.VarChar(20)
+  notes         String?
+  createdById   String?   @map("created_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  createdBy User?        @relation("RenterCreatedBy", fields: [createdById], references: [id])
+  rentals   Rental[]
+
+  @@index([orgId])
+  @@map("renters")
+}
+
+/// Contrato de alquiler: une vehículo + arrendatario + tarifa diaria + fechas.
+/// Los cobros de cada día se registran en el calendario (DailyRecord).
+model Rental {
+  id          String       @id @default(uuid()) @db.Uuid
+  orgId       String       @map("org_id") @db.Uuid
+  vehicleId   String       @map("vehicle_id") @db.Uuid
+  renterId    String       @map("renter_id") @db.Uuid
+  dailyRate   Decimal      @map("daily_rate") @db.Decimal(10, 2)
+  startDate   DateTime     @map("start_date") @db.Date
+  endDate     DateTime?    @map("end_date") @db.Date
+  status      RentalStatus @default(activo)
+  notes       String?
+  createdById String?      @map("created_by") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  vehicle   Vehicle      @relation(fields: [vehicleId], references: [id])
+  renter    Renter       @relation(fields: [renterId], references: [id])
+  createdBy User?        @relation("RentalCreatedBy", fields: [createdById], references: [id])
+  dailyRecords DailyRecord[]
+
+  @@index([orgId, status])
+  @@index([vehicleId])
+  @@index([renterId])
+  @@map("rentals")
+}
+
+// ───────────── Calendario de cobros y gastos ─────────────
+
+/// Un registro por vehículo y día (el color del calendario).
+///   pagado          🟢 tarifa completa (ajustable)
+///   medio           🟡 media cuenta (ajustable)
+///   no_pago         🔴 no se paga cuenta (S/ 0, no genera deuda)
+///   fuera_servicio  🟣 taller / fuera de servicio (sin monto)
+model DailyRecord {
+  id          String         @id @default(uuid()) @db.Uuid
+  orgId       String         @map("org_id") @db.Uuid
+  vehicleId   String         @map("vehicle_id") @db.Uuid
+  /// Contrato vigente ese día (null si no había contrato: solo para fuera_servicio)
+  rentalId    String?        @map("rental_id") @db.Uuid
+  date        DateTime       @db.Date
+  status      DayStatus
+  amount      Decimal        @default(0) @db.Decimal(10, 2)
+  method      PaymentMethod?
+  note        String?        @db.VarChar(255)
+  createdById String?        @map("created_by") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  vehicle   Vehicle      @relation(fields: [vehicleId], references: [id])
+  rental    Rental?      @relation(fields: [rentalId], references: [id])
+  createdBy User?        @relation("DailyRecordCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([vehicleId, date])
+  @@index([orgId, date])
+  @@index([rentalId])
+  @@map("daily_records")
+}
+
+/// Gastos por vehículo (mantenimiento, servicio, accesorio...).
+model Expense {
+  id          String          @id @default(uuid()) @db.Uuid
+  orgId       String          @map("org_id") @db.Uuid
+  vehicleId   String          @map("vehicle_id") @db.Uuid
+  date        DateTime        @db.Date
+  category    ExpenseCategory
+  amount      Decimal         @db.Decimal(10, 2)
+  description String?         @db.VarChar(255)
+  createdById String?         @map("created_by") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  vehicle   Vehicle      @relation(fields: [vehicleId], references: [id])
+  createdBy User?        @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+
+  @@index([orgId, date])
+  @@index([vehicleId, date])
+  @@map("expenses")
+}
+
+// ───────────── Documentos ─────────────
+
+model Document {
+  id          String       @id @default(uuid()) @db.Uuid
+  orgId       String       @map("org_id") @db.Uuid
+  vehicleId   String       @map("vehicle_id") @db.Uuid
+  type        DocumentType
+  number      String?      @db.VarChar(40)
+  issuedOn    DateTime?    @map("issued_on") @db.Date
+  expiresOn   DateTime?    @map("expires_on") @db.Date
+  fileName    String       @map("file_name") @db.VarChar(160)
+  mimeType    String       @map("mime_type") @db.VarChar(60)
+  sizeBytes   Int          @map("size_bytes")
+  notes       String?
+  createdById String?      @map("created_by") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  org       Organization  @relation(fields: [orgId], references: [id])
+  vehicle   Vehicle       @relation(fields: [vehicleId], references: [id])
+  createdBy User?         @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  file      DocumentFile?
+
+  @@index([orgId, expiresOn])
+  @@index([vehicleId])
+  @@map("documents")
+}
+
+/// El archivo en sí (binario). Tabla aparte para que los listados no lo carguen.
+model DocumentFile {
+  documentId String @id @map("document_id") @db.Uuid
+  data       Bytes
+  sha256     String @db.Char(64)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_files")
+}
+
+// ───────────── Mantenimientos ─────────────
+
+model Maintenance {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  vehicleId   String    @map("vehicle_id") @db.Uuid
+  doneOn      DateTime  @map("done_on") @db.Date
+  type        String    @db.VarChar(80)
+  km          Int?
+  /// Repuestos (S/)
+  partsCost   Decimal   @default(0) @map("parts_cost") @db.Decimal(10, 2)
+  /// Mano de obra (S/)
+  laborCost   Decimal   @default(0) @map("labor_cost") @db.Decimal(10, 2)
+  /// Total = repuestos + mano de obra (lo calcula el sistema)
+  cost        Decimal   @default(0) @db.Decimal(10, 2)
+  workshop    String?   @db.VarChar(120)
+  detail      String?
+  nextKm      Int?      @map("next_km")
+  nextDate    DateTime? @map("next_date") @db.Date
+  createdById String?   @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  vehicle   Vehicle      @relation(fields: [vehicleId], references: [id])
+  createdBy User?        @relation("MaintenanceCreatedBy", fields: [createdById], references: [id])
+
+  @@index([orgId, doneOn])
+  @@index([vehicleId, doneOn])
+  @@map("maintenances")
+}
+
+// ───────────── Bitácora ─────────────
+
+/// Registro inmutable de acciones. No existe endpoint para editarla ni borrarla.
+model AuditLog {
+  id        BigInt      @id @default(autoincrement())
+  /// null = acción a nivel plataforma (superadmin)
+  orgId     String?     @map("org_id") @db.Uuid
+  userId    String?     @map("user_id") @db.Uuid
+  action    AuditAction
+  /// Módulo afectado: user, organization, vehicle, rental, payment, document, maintenance...
+  entity    String      @db.VarChar(40)
+  entityId  String?     @map("entity_id") @db.VarChar(64)
+  /// Para update: { campo: { antes, despues } }. Para create/delete: snapshot.
+  changes   Json?
+  ip        String?     @db.VarChar(64)
+  userAgent String?     @map("user_agent") @db.VarChar(255)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  org  Organization? @relation(fields: [orgId], references: [id])
+  user User?         @relation(fields: [userId], references: [id])
+
+  @@index([orgId, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}

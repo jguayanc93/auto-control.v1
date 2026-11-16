@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <title>Inicio · AUTO-CONTROL</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <script src="/js/theme.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3/dist/index.global.js"></script>
+  <script type="module" src="/js/pages/inicio.js"></script>
+</head>
+<body>
+  <main id="page" x-data="page" x-cloak>
+
+    <section class="mb-5">
+      <p class="text-sm text-slate-500" x-text="greeting"></p>
+      <h1 class="page-title" x-text="firstName"></h1>
+      <p class="text-sm text-slate-500" x-show="org" x-text="org?.name"></p>
+    </section>
+
+    <!-- Indicadores -->
+    <section class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <template x-for="i in (loading ? 4 : 0)" :key="i"><div class="card h-28 animate-pulse bg-slate-200/50"></div></template>
+      <template x-for="k in kpis" :key="k.label">
+        <a :href="k.href" class="card p-4 transition hover:border-brand-200 active:scale-[.98]">
+          <div class="flex items-center gap-2 text-slate-500">
+            <span class="flex size-8 shrink-0 items-center justify-center rounded-lg" :class="k.tone" x-html="k.icon"></span>
+            <span class="text-xs font-medium leading-tight" x-text="k.label"></span>
+          </div>
+          <p class="mt-3 text-xl font-bold tracking-tight lg:text-2xl" :class="k.negative && 'text-rose-600'" x-text="k.value"></p>
+          <p class="mt-0.5 truncate text-xs text-slate-500" x-text="k.sub"></p>
+        </a>
+      </template>
+    </section>
+
+    <div class="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
+      <!-- Requiere atención -->
+      <section>
+        <h2 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">Requiere atención
+          <span class="pill bg-rose-50 text-rose-700" x-show="attention.length" x-text="attention.length"></span></h2>
+        <div class="card h-40 animate-pulse bg-slate-200/50" x-show="loading"></div>
+        <div class="card flex flex-col items-center px-6 py-10 text-center" x-show="!loading && data && !attention.length">
+          <span class="flex size-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700" x-html="icons.check"></span>
+          <p class="mt-3 font-semibold">Todo en orden</p>
+          <p class="mt-1 max-w-xs text-sm text-slate-500">Sin documentos por vencer, mantenimientos pendientes ni días sin marcar.</p>
+        </div>
+        <div class="card divide-y divide-slate-100" x-show="attention.length">
+          <template x-for="a in attention" :key="a.key">
+            <a :href="a.href" class="flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50">
+              <span class="flex size-10 shrink-0 items-center justify-center rounded-xl"
+                :class="a.level === 0 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'" x-html="a.icon"></span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-semibold" x-text="a.title"></p>
+                <p class="truncate text-xs text-slate-500" x-text="a.sub"></p>
+              </div>
+              <span class="pill shrink-0" :class="a.level === 0 ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'" x-text="a.badge"></span>
+              <span class="text-slate-400" x-html="icons.chevron"></span>
+            </a>
+          </template>
+        </div>
+      </section>
+
+      <div class="space-y-6">
+        <!-- Resumen del mes -->
+        <section class="card p-4" x-show="data">
+          <div class="flex items-baseline justify-between">
+            <p class="text-sm font-semibold capitalize text-slate-700" x-text="data && `Resumen ${fmt.monthLabel(data.month.month).toLowerCase()}`"></p>
+            <a href="/pagos.html" class="text-xs font-semibold text-brand-600">Ver pagos</a>
+          </div>
+          <dl class="mt-3 space-y-2 text-sm" x-show="data">
+            <div class="flex justify-between"><dt class="text-slate-500">Ingresos</dt><dd class="font-semibold text-emerald-600" x-text="fmt.money(data?.month.income)"></dd></div>
+            <div class="flex justify-between"><dt class="text-slate-500">Mantenimiento</dt><dd class="font-semibold text-rose-600" x-text="'− ' + fmt.money(data?.month.maintenance)"></dd></div>
+            <div class="flex justify-between"><dt class="text-slate-500">Otros gastos</dt><dd class="font-semibold text-rose-600" x-text="'− ' + fmt.money(data?.month.otherExpenses)"></dd></div>
+            <div class="flex justify-between border-t border-slate-100 pt-2 text-base"><dt class="font-semibold">Total ingreso</dt>
+              <dd class="font-bold" :class="Number(data?.month.net) < 0 ? 'text-rose-600' : 'text-slate-900'" x-text="fmt.money(data?.month.net)"></dd></div>
+          </dl>
+        </section>
+
+        <!-- Cobros de los últimos 7 días -->
+        <section class="card p-4" x-show="data">
+          <div class="flex items-baseline justify-between">
+            <p class="text-sm font-semibold text-slate-700">Cobros últimos 7 días</p>
+            <p class="text-sm font-bold" x-text="fmt.money(weekTotal)"></p>
+          </div>
+          <div class="mt-4 flex h-28 items-end gap-2" role="img" :aria-label="`Cobros de los últimos 7 días: ${fmt.money(weekTotal)}`">
+            <template x-for="d in week" :key="d.date">
+              <div class="flex h-full flex-1 flex-col items-center justify-end gap-1" :title="`${d.label}: ${fmt.money(d.income)}`">
+                <span class="text-[10px] font-medium text-slate-500" x-show="Number(d.income)" x-text="Math.round(Number(d.income))"></span>
+                <div class="w-full rounded-t-md" :class="d.isToday ? 'bg-brand-600' : 'bg-brand-200'"
+                  :style="`height: ${Math.max(d.pct, Number(d.income) ? 4 : 2)}%`"></div>
+                <span class="text-[11px] capitalize" :class="d.isToday ? 'font-semibold text-slate-900' : 'text-slate-500'" x-text="d.isToday ? 'Hoy' : d.label"></span>
+              </div>
+            </template>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Acciones rápidas -->
+    <section class="mt-6">
+      <h2 class="mb-3 text-sm font-semibold text-slate-700">Acciones rápidas</h2>
+      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <template x-for="a in actions" :key="a.label">
+          <a :href="a.href" class="card flex items-center gap-3 p-3.5 transition active:scale-[.98] hover:border-brand-200">
+            <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white" x-html="a.icon"></span>
+            <span class="text-sm font-semibold leading-tight" x-text="a.label"></span>
+          </a>
+        </template>
+      </div>
+    </section>
+
+  </main>
+</body>
+</html>

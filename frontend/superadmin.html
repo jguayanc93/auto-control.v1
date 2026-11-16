@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <title>Negocios · AUTO-CONTROL</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <script src="/js/theme.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3/dist/index.global.js"></script>
+  <script type="module" src="/js/pages/superadmin.js"></script>
+</head>
+<body>
+  <main id="page" x-data="page" x-cloak>
+
+    <!-- Encabezado -->
+    <div class="flex items-end justify-between gap-3">
+      <div>
+        <h1 class="page-title">Negocios</h1>
+        <p class="page-sub" x-text="loading ? 'Cargando…' : `${stats.total} negocio${stats.total === 1 ? '' : 's'} registrado${stats.total === 1 ? '' : 's'}`"></p>
+      </div>
+      <button type="button" class="btn btn-primary hidden lg:inline-flex" @click="openCreate"><span x-html="icons.plus"></span>Nuevo negocio</button>
+    </div>
+
+    <!-- Resumen -->
+    <section class="mt-4 grid grid-cols-3 gap-2 lg:max-w-xl">
+      <div class="card px-3 py-2.5"><p class="text-[11px] font-medium text-slate-500">Activos</p><p class="text-lg font-bold text-emerald-600" x-text="stats.active"></p></div>
+      <div class="card px-3 py-2.5"><p class="text-[11px] font-medium text-slate-500">Suspendidos</p><p class="text-lg font-bold" :class="stats.suspended ? 'text-rose-600' : 'text-slate-400'" x-text="stats.suspended"></p></div>
+      <div class="card px-3 py-2.5"><p class="text-[11px] font-medium text-slate-500">Vehículos</p><p class="text-lg font-bold" x-text="stats.vehicles"></p></div>
+    </section>
+
+    <!-- Búsqueda y filtro -->
+    <section class="mt-4 flex flex-col gap-2 lg:flex-row lg:items-center" x-show="items.length">
+      <input type="search" x-model="q" placeholder="Buscar negocio o administrador…" class="input lg:max-w-sm" aria-label="Buscar">
+      <div class="flex gap-1 rounded-xl bg-slate-200/70 p-1 text-sm font-medium">
+        <template x-for="f in [['all','Todos'],['active','Activos'],['suspended','Suspendidos']]" :key="f[0]">
+          <button type="button" class="flex-1 rounded-lg px-3 py-1.5 transition lg:flex-none"
+            :class="filter === f[0] ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'" @click="filter = f[0]" x-text="f[1]"></button>
+        </template>
+      </div>
+    </section>
+
+    <!-- Cargando -->
+    <section class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3" x-show="loading">
+      <template x-for="i in 3"><div class="card h-36 animate-pulse bg-slate-200/50"></div></template>
+    </section>
+
+    <!-- Vacío -->
+    <section class="card mt-4 flex flex-col items-center px-6 py-12 text-center" x-show="!loading && !items.length">
+      <span class="flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600" x-html="icons.building"></span>
+      <p class="mt-4 font-semibold">Aún no hay negocios</p>
+      <p class="mt-1 max-w-xs text-sm text-slate-500">Crea el primero: se registrará el negocio junto con su administrador.</p>
+      <button type="button" class="btn btn-primary mt-5" @click="openCreate"><span x-html="icons.plus"></span>Nuevo negocio</button>
+    </section>
+
+    <p class="mt-6 text-center text-sm text-slate-500" x-show="!loading && items.length && !filtered.length">No hay resultados para tu búsqueda.</p>
+
+    <!-- Lista -->
+    <section class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3" x-show="!loading">
+      <template x-for="b in filtered" :key="b.id">
+        <button type="button" @click="openDetail(b)" class="card p-4 text-left transition hover:border-brand-200 active:scale-[.99]"
+          :class="b.status === 'suspended' && 'opacity-75'">
+          <div class="flex items-start gap-3">
+            <span class="flex size-11 shrink-0 items-center justify-center rounded-xl font-bold"
+              :class="b.status === 'active' ? 'bg-brand-50 text-brand-700' : 'bg-slate-100 text-slate-500'" x-text="initials(b.name)"></span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <p class="truncate font-semibold" x-text="b.name"></p>
+                <span class="pill shrink-0" :class="b.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'"
+                  x-text="b.status === 'active' ? 'Activo' : 'Suspendido'"></span>
+              </div>
+              <p class="truncate text-sm text-slate-500" x-text="b.admin ? `${b.admin.name} · @${b.admin.username}` : 'Sin administrador'"></p>
+            </div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500">
+            <span class="flex items-center gap-1.5"><span x-html="icons.car"></span><span x-text="`${b.counts.vehicles} vehículo${b.counts.vehicles === 1 ? '' : 's'}`"></span></span>
+            <span class="flex items-center gap-1.5"><span x-html="icons.users"></span><span x-text="`${b.counts.operators} operador${b.counts.operators === 1 ? '' : 'es'}`"></span></span>
+            <span class="ml-auto" x-text="b.admin?.lastLoginAt ? `Último acceso: ${dateTime(b.admin.lastLoginAt)}` : 'Nunca ingresó'"></span>
+          </div>
+        </button>
+      </template>
+    </section>
+
+    <!-- Botón flotante (celular) -->
+    <button type="button" @click="openCreate" aria-label="Nuevo negocio"
+      class="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 flex size-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 active:scale-95 lg:hidden"
+      x-html="icons.plus"></button>
+
+    <!-- ═════ Panel: formulario crear / editar ═════ -->
+    <div class="sheet-wrap" x-show="sheet === 'form'" x-cloak @keydown.escape.window="sheet === 'form' && (sheet = mode === 'edit' ? 'detail' : null)">
+      <div class="sheet-backdrop" x-show="sheet === 'form'" x-transition.opacity @click="sheet = null"></div>
+      <form class="sheet" x-show="sheet === 'form'" @submit.prevent="save" novalidate
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <div class="sheet-header">
+          <p class="flex-1 text-lg font-semibold" x-text="mode === 'create' ? 'Nuevo negocio' : 'Editar negocio'"></p>
+          <button type="button" class="icon-btn" @click="sheet = mode === 'edit' ? 'detail' : null" aria-label="Cerrar" x-html="icons.x"></button>
+        </div>
+
+        <div class="sheet-body space-y-5">
+          <fieldset class="space-y-4">
+            <legend class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Negocio</legend>
+            <div>
+              <label class="label" for="f-business">Nombre del negocio</label>
+              <input id="f-business" class="input" x-model="form.businessName" placeholder="Ej. Autos Lima Norte" :class="fields.businessName && 'input-error'">
+              <p class="field-error" x-show="fields.businessName" x-text="fields.businessName"></p>
+            </div>
+          </fieldset>
+
+          <fieldset class="space-y-4">
+            <legend class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Administrador</legend>
+            <div>
+              <label class="label" for="f-admin">Nombre completo</label>
+              <input id="f-admin" class="input" x-model="form.adminName" autocomplete="off" placeholder="Ej. Carlos Ramírez" :class="fields.adminName && 'input-error'">
+              <p class="field-error" x-show="fields.adminName" x-text="fields.adminName"></p>
+            </div>
+            <div>
+              <label class="label" for="f-user">Usuario para iniciar sesión</label>
+              <input id="f-user" class="input disabled:bg-slate-100 disabled:text-slate-500" x-model="form.username" :disabled="mode === 'edit'"
+                autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="Ej. cramirez" :class="fields.username && 'input-error'">
+              <p class="field-error" x-show="fields.username" x-text="fields.username"></p>
+              <p class="mt-1 text-xs text-slate-500" x-show="!fields.username" x-text="mode === 'edit' ? 'El usuario no se puede cambiar.' : 'Letras, números, punto o guion. Sin espacios.'"></p>
+            </div>
+            <div>
+              <label class="label" for="f-email">Correo <span class="font-normal text-slate-400">(opcional)</span></label>
+              <input id="f-email" class="input" type="email" inputmode="email" autocapitalize="none" x-model="form.email" placeholder="nombre@correo.com" :class="fields.email && 'input-error'">
+              <p class="field-error" x-show="fields.email" x-text="fields.email"></p>
+            </div>
+            <div x-show="mode === 'create'">
+              <label class="label" for="f-pass">Contraseña <span class="font-normal text-slate-400">(opcional)</span></label>
+              <input id="f-pass" class="input" type="text" autocomplete="new-password" autocapitalize="none" x-model="form.password" placeholder="Déjala vacía para generar una" :class="fields.password && 'input-error'">
+              <p class="field-error" x-show="fields.password" x-text="fields.password"></p>
+              <p class="mt-1 text-xs text-slate-500" x-show="!fields.password">Si la dejas vacía se genera una contraseña segura que podrás copiar o enviar por WhatsApp.</p>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="sheet-footer">
+          <button type="button" class="btn btn-secondary flex-1" @click="sheet = mode === 'edit' ? 'detail' : null">Cancelar</button>
+          <button class="btn btn-primary flex-1" :disabled="saving" x-text="saving ? 'Guardando…' : (mode === 'create' ? 'Crear negocio' : 'Guardar')"></button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ═════ Panel: detalle ═════ -->
+    <div class="sheet-wrap" x-show="sheet === 'detail'" x-cloak @keydown.escape.window="sheet === 'detail' && (sheet = null)">
+      <div class="sheet-backdrop" x-show="sheet === 'detail'" x-transition.opacity @click="sheet = null"></div>
+      <div class="sheet" x-show="sheet === 'detail'"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <template x-if="current">
+          <div class="flex min-h-0 flex-col">
+            <div class="sheet-header">
+              <span class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 font-bold text-brand-700" x-text="initials(current.name)"></span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-lg font-semibold" x-text="current.name"></p>
+                <span class="pill" :class="current.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'"
+                  x-text="current.status === 'active' ? 'Activo' : 'Suspendido'"></span>
+              </div>
+              <button type="button" class="icon-btn" @click="sheet = null" aria-label="Cerrar" x-html="icons.x"></button>
+            </div>
+
+            <div class="sheet-body">
+              <dl class="divide-y divide-slate-100 rounded-2xl border border-slate-200 text-sm">
+                <div class="flex justify-between gap-4 px-4 py-3"><dt class="text-slate-500">Administrador</dt><dd class="text-right font-medium" x-text="current.admin?.name ?? '—'"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-3"><dt class="text-slate-500">Usuario</dt><dd class="font-medium" x-text="current.admin ? '@' + current.admin.username : '—'"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-3"><dt class="text-slate-500">Correo</dt><dd class="truncate font-medium" x-text="current.admin?.email || '—'"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-3"><dt class="text-slate-500">Vehículos</dt><dd class="font-medium" x-text="current.counts.vehicles"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-3"><dt class="text-slate-500">Operadores</dt><dd class="font-medium" x-text="current.counts.operators"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-3"><dt class="text-slate-500">Último acceso</dt><dd class="text-right font-medium" x-text="current.admin?.lastLoginAt ? dateTime(current.admin.lastLoginAt) : 'Nunca'"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-3"><dt class="text-slate-500">Creado</dt><dd class="text-right font-medium" x-text="dateTime(current.createdAt)"></dd></div>
+              </dl>
+
+              <div class="mt-5 space-y-2">
+                <button type="button" class="btn btn-secondary btn-block justify-start" @click="openEdit">
+                  <span x-html="icons.edit"></span>Editar datos</button>
+                <button type="button" class="btn btn-secondary btn-block justify-start" @click="resetPassword" :disabled="busy || !current.admin">
+                  <span x-html="icons.lock"></span>Restablecer contraseña del administrador</button>
+                <button type="button" class="btn btn-block justify-start" @click="toggleStatus" :disabled="busy"
+                  :class="current.status === 'active' ? 'btn-danger' : 'btn-secondary text-emerald-700'">
+                  <span x-html="current.status === 'active' ? icons.alert : icons.check"></span>
+                  <span x-text="current.status === 'active' ? 'Suspender negocio' : 'Reactivar negocio'"></span></button>
+              </div>
+              <p class="mt-4 text-xs text-slate-500">Como superadministrador solo ves datos generales. La información del negocio (vehículos, pagos, documentos) es privada de su administrador.</p>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ═════ Panel: credenciales (js/ui/credentials.js) ═════ -->
+    <div data-ui="credentials-sheet"></div>
+
+  </main>
+</body>
+</html>

@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <title>Calendario de cobros · AUTO-CONTROL</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <script src="/js/theme.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3/dist/index.global.js"></script>
+  <script type="module" src="/js/pages/calendario.js"></script>
+</head>
+<body>
+  <main id="page" x-data="page" x-cloak>
+
+    <a href="/pagos.html" class="-ml-1 inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-800">
+      <span x-html="icons.back"></span>Pagos diarios</a>
+
+    <!-- Cargando -->
+    <div class="mt-3 space-y-3" x-show="!data">
+      <div class="card h-20 animate-pulse bg-slate-200/50"></div>
+      <div class="card h-80 animate-pulse bg-slate-200/50"></div>
+    </div>
+
+    <template x-if="data">
+      <div>
+        <!-- Vehículo -->
+        <section class="mt-3 flex items-center gap-3">
+          <span class="inline-flex shrink-0 flex-col items-center rounded-md border-2 border-slate-800 bg-white px-2 pt-0.5 pb-1 leading-none">
+            <span class="text-[7px] font-bold tracking-[.2em] text-slate-500">PERÚ</span>
+            <span class="font-mono text-lg font-bold tracking-wider" x-text="fmt.plate(data.vehicle.plate)"></span>
+          </span>
+          <div class="min-w-0">
+            <h1 class="truncate text-lg font-bold uppercase tracking-tight" x-text="`${data.vehicle.brand} ${data.vehicle.model}`"></h1>
+            <p class="truncate text-sm text-slate-500"
+              x-text="currentRental ? `${currentRental.renter.fullName} · ${fmt.money(currentRental.dailyRate)}/día` : 'Sin contrato en este mes'"></p>
+          </div>
+        </section>
+
+        <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+          <!-- ═════ Calendario ═════ -->
+          <section class="card overflow-hidden" :class="loading && 'opacity-60'">
+            <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+              <button type="button" class="icon-btn" @click="go(-1)" aria-label="Mes anterior" x-html="icons.left"></button>
+              <p class="font-semibold" x-text="fmt.monthLabel(month)"></p>
+              <button type="button" class="icon-btn" @click="go(1)" aria-label="Mes siguiente" x-html="icons.right"></button>
+            </div>
+
+            <div class="px-2 pt-2 pb-3 sm:px-4">
+              <div class="grid grid-cols-7 text-center text-[11px] font-semibold text-slate-400">
+                <template x-for="w in WEEKDAYS" :key="w"><div class="py-1.5" x-text="w"></div></template>
+              </div>
+              <div class="grid grid-cols-7 gap-y-1">
+                <template x-for="(c, i) in cells" :key="c ? c.date : 'e' + i">
+                  <div class="flex justify-center">
+                    <template x-if="c">
+                      <button type="button" @click="openDay(c)" :aria-label="fmt.longDate(c.date)"
+                        class="relative flex aspect-square w-full max-w-14 flex-col items-center justify-center rounded-full text-sm transition active:scale-95"
+                        :class="cellClass(c)">
+                        <span x-text="c.n" :class="c.today && 'underline decoration-brand-600 decoration-2 underline-offset-4'"></span>
+                        <span class="text-[9px] leading-none text-slate-500" x-show="c.record && ['pagado','medio'].includes(c.record.status)" x-text="Number(c.record?.amount)"></span>
+                      </button>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Leyenda (como el bosquejo) -->
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-slate-100 px-4 py-3 text-xs">
+              <template x-for="(st, key) in DAY_STATUS" :key="key">
+                <div class="flex items-center gap-2">
+                  <span class="size-3.5 shrink-0 rounded-full" :class="st.dot"></span>
+                  <span class="font-medium" x-text="st.legend"></span>
+                  <span class="text-slate-500" x-show="currentRental && key !== 'fuera_servicio'"
+                    x-text="'(' + fmt.money(suggested(key, currentRental?.startDate)) + ')'"></span>
+                </div>
+              </template>
+              <div class="col-span-2 flex items-center gap-2 text-slate-500">
+                <span class="size-3.5 shrink-0 rounded-full border-2 border-dashed border-amber-400 bg-amber-50"></span>Falta marcar
+              </div>
+            </div>
+          </section>
+
+          <div class="space-y-4">
+            <!-- ═════ Resumen ═════ -->
+            <section class="card p-4">
+              <p class="text-sm font-semibold text-slate-700" x-text="`Resumen ${fmt.monthLabel(month).toLowerCase()}`"></p>
+              <dl class="mt-3 space-y-2 text-sm">
+                <div class="flex justify-between"><dt class="text-slate-500">Ingresos</dt><dd class="font-semibold text-emerald-600" x-text="fmt.money(data.summary.income)"></dd></div>
+                <div class="flex justify-between"><dt class="text-slate-500">Mantenimiento</dt><dd class="font-semibold text-rose-600" x-text="'− ' + fmt.money(data.summary.maintenance)"></dd></div>
+                <div class="flex justify-between"><dt class="text-slate-500">Otros gastos</dt><dd class="font-semibold text-rose-600" x-text="'− ' + fmt.money(data.summary.otherExpenses)"></dd></div>
+                <div class="flex justify-between border-t border-slate-100 pt-2 text-base"><dt class="font-semibold">Total ingreso</dt>
+                  <dd class="font-bold" :class="Number(data.summary.net) < 0 ? 'text-rose-600' : 'text-slate-900'" x-text="fmt.money(data.summary.net)"></dd></div>
+              </dl>
+              <div class="mt-3 grid grid-cols-4 gap-1 text-center">
+                <template x-for="(st, key) in DAY_STATUS" :key="key">
+                  <div class="rounded-lg py-1.5" :class="st.soft">
+                    <p class="text-base font-bold" x-text="data.summary.counts[key]"></p>
+                    <p class="text-[10px] leading-tight" x-text="st.label"></p>
+                  </div>
+                </template>
+              </div>
+              <p class="mt-3 flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800" x-show="data.summary.pendingDays">
+                <span x-html="icons.alert"></span>
+                <span x-text="`Faltan marcar ${data.summary.pendingDays} día${data.summary.pendingDays === 1 ? '' : 's'} (borde punteado).`"></span></p>
+            </section>
+
+            <!-- ═════ Gastos ═════ -->
+            <section class="card p-4">
+              <div class="flex items-center justify-between">
+                <p class="text-sm font-semibold text-slate-700">Gastos del mes</p>
+                <div class="flex gap-1.5">
+                  <a :href="maintenanceUrl()" class="btn btn-secondary h-9 px-3" title="Registrar mantenimiento o reparación"><span x-html="icons.plus"></span>Mantenimiento</a>
+                  <button type="button" class="btn btn-secondary h-9 px-3" @click="openExpense()"><span x-html="icons.plus"></span>Gasto</button>
+                </div>
+              </div>
+              <p class="mt-3 text-sm text-slate-500" x-show="!allExpenses.length">Sin gastos registrados en este mes.</p>
+              <ul class="mt-3 divide-y divide-slate-100">
+                <template x-for="e in allExpenses" :key="e.kind + e.id">
+                  <li>
+                    <template x-if="e.kind === 'maintenance'">
+                      <a :href="maintenanceUrl(e)" class="flex w-full items-center gap-3 py-2.5 text-left">
+                        <span class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700" x-html="icons.wrench"></span>
+                        <div class="min-w-0 flex-1">
+                          <p class="truncate text-sm font-medium" x-text="e.type"></p>
+                          <p class="truncate text-xs text-slate-500" x-text="['Mantenimiento', fmt.date(e.date), e.workshop].filter(Boolean).join(' · ')"></p>
+                        </div>
+                        <span class="text-sm font-semibold text-rose-600" x-text="fmt.money(e.amount)"></span>
+                      </a>
+                    </template>
+                    <template x-if="e.kind === 'expense'">
+                    <button type="button" class="flex w-full items-center gap-3 py-2.5 text-left" @click="can('records:edit') && openExpense(e)" :class="!can('records:edit') && 'cursor-default'">
+                      <span class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600" x-html="icons.receipt"></span>
+                      <div class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-medium" x-text="e.description || EXPENSE_CATEGORY[e.category]"></p>
+                        <p class="text-xs text-slate-500" x-text="`${EXPENSE_CATEGORY[e.category]} · ${fmt.date(e.date)}`"></p>
+                      </div>
+                      <span class="text-sm font-semibold text-rose-600" x-text="fmt.money(e.amount)"></span>
+                    </button>
+                    </template>
+                  </li>
+                </template>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ══════════════════ PANEL: DÍA ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'day'" x-cloak @keydown.escape.window="sheet === 'day' && (sheet = null)">
+      <div class="sheet-backdrop" x-show="sheet === 'day'" x-transition.opacity @click="sheet = null"></div>
+      <div class="sheet" x-show="sheet === 'day'" role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <template x-if="selected">
+          <div class="flex min-h-0 flex-col">
+            <div class="sheet-header">
+              <div class="min-w-0 flex-1">
+                <p class="text-lg font-semibold first-letter:uppercase" x-text="fmt.longDate(selected.date)"></p>
+                <p class="truncate text-sm text-slate-500"
+                  x-text="rentalOn(selected.date) ? `${rentalOn(selected.date).renter.fullName} · ${fmt.money(rentalOn(selected.date).dailyRate)}/día` : 'Sin contrato este día'"></p>
+              </div>
+              <button type="button" class="icon-btn" @click="sheet = null" aria-label="Cerrar" x-html="icons.x"></button>
+            </div>
+
+            <div class="sheet-body space-y-4">
+              <!-- Día ya marcado -->
+              <template x-if="selected.record">
+                <div class="space-y-4">
+                  <div class="flex items-center gap-3 rounded-2xl p-3" :class="DAY_STATUS[selected.record.status].soft">
+                    <span class="size-4 shrink-0 rounded-full" :class="DAY_STATUS[selected.record.status].dot"></span>
+                    <div class="min-w-0 flex-1">
+                      <p class="font-semibold" x-text="DAY_STATUS[selected.record.status].label"></p>
+                      <p class="text-xs opacity-80" x-text="`Registrado por ${selected.record.createdBy ?? '—'}`"></p>
+                    </div>
+                    <div class="text-right" x-show="['pagado','medio'].includes(selected.record.status)">
+                      <p class="font-bold" x-text="fmt.money(selected.record.amount)"></p>
+                      <p class="text-xs opacity-80" x-text="PAYMENT_METHOD[selected.record.method]"></p>
+                    </div>
+                  </div>
+                  <p class="rounded-xl bg-slate-50 px-3 py-2 text-sm" x-show="selected.record.note" x-text="selected.record.note"></p>
+
+                  <!-- Solo admin puede cambiar -->
+                  <template x-if="can('records:edit')">
+                    <div class="space-y-4">
+                      <div>
+                        <p class="label">Cambiar a</p>
+                        <div class="grid grid-cols-2 gap-2">
+                          <template x-for="(st, key) in DAY_STATUS" :key="key">
+                            <button type="button" class="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition disabled:opacity-40"
+                              :class="key === selected.record.status ? 'border-slate-900 bg-slate-50' : 'border-slate-200'"
+                              :disabled="saving || key === selected.record.status || !canMark(key)" @click="updateDay(key)">
+                              <span class="size-3.5 shrink-0 rounded-full" :class="st.dot"></span><span x-text="st.label"></span>
+                            </button>
+                          </template>
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-2 gap-3" x-show="['pagado','medio'].includes(selected.record.status)">
+                        <div>
+                          <label class="label" for="d-amount">Monto</label>
+                          <input id="d-amount" class="input" inputmode="decimal" x-model="dayForm.amount" :class="fields.amount && 'input-error'">
+                          <p class="field-error" x-show="fields.amount" x-text="fields.amount"></p>
+                        </div>
+                        <div>
+                          <label class="label" for="d-method">Método</label>
+                          <select id="d-method" class="input" x-model="dayForm.method">
+                            <template x-for="(label, key) in PAYMENT_METHOD" :key="key"><option :value="key" x-text="label"></option></template>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label class="label" for="d-note">Nota</label>
+                        <input id="d-note" class="input" x-model="dayForm.note" maxlength="255">
+                      </div>
+                      <div class="flex gap-2">
+                        <button type="button" class="btn btn-danger" @click="clearDay" :disabled="saving"><span x-html="icons.trash"></span>Quitar</button>
+                        <button type="button" class="btn btn-primary flex-1" @click="updateDay()" :disabled="saving" x-text="saving ? 'Guardando…' : 'Guardar cambios'"></button>
+                      </div>
+                    </div>
+                  </template>
+                  <p class="text-xs text-slate-500" x-show="!can('records:edit')">Si el día se marcó mal, pídele al administrador que lo corrija.</p>
+                </div>
+              </template>
+
+              <!-- Día sin marcar -->
+              <template x-if="!selected.record">
+                <div class="space-y-4">
+                  <p class="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600" x-show="dayHint">
+                    <span class="mt-0.5 shrink-0" x-html="icons.alert"></span><span x-text="dayHint"></span></p>
+
+                  <div class="grid grid-cols-2 gap-2">
+                    <template x-for="(st, key) in DAY_STATUS" :key="key">
+                      <button type="button" @click="mark(key)" :disabled="saving || !canMark(key)"
+                        class="flex min-h-20 flex-col items-start justify-between rounded-2xl p-3 text-left shadow-sm transition active:scale-[.97] disabled:opacity-30 disabled:shadow-none"
+                        :class="st.btn">
+                        <span class="text-sm font-semibold leading-tight" x-text="st.legend"></span>
+                        <span class="text-lg font-bold" x-text="key === 'fuera_servicio' ? '—' : fmt.money(dayForm.adjust && dayForm.amount !== '' && ['pagado','medio'].includes(key) ? dayForm.amount : suggested(key))"></span>
+                      </button>
+                    </template>
+                  </div>
+
+                  <div class="flex flex-wrap gap-1.5" x-show="canMark('pagado')">
+                    <template x-for="(label, key) in PAYMENT_METHOD" :key="key">
+                      <button type="button" class="rounded-full border px-3 py-1 text-xs font-medium transition"
+                        :class="dayForm.method === key ? 'border-navy-900 bg-navy-900 text-white' : 'border-slate-300 text-slate-600'"
+                        @click="dayForm.method = key" x-text="label"></button>
+                    </template>
+                  </div>
+
+                  <button type="button" class="text-sm font-medium text-brand-600" @click="dayForm.adjust = !dayForm.adjust"
+                    x-text="dayForm.adjust ? 'Ocultar ajustes' : 'Ajustar monto o agregar nota'"></button>
+                  <div class="grid grid-cols-2 gap-3" x-show="dayForm.adjust">
+                    <div>
+                      <label class="label" for="n-amount">Monto pagado</label>
+                      <input id="n-amount" class="input" inputmode="decimal" x-model="dayForm.amount" :placeholder="suggested('pagado').toFixed(2)" :class="fields.amount && 'input-error'">
+                      <p class="field-error" x-show="fields.amount" x-text="fields.amount"></p>
+                    </div>
+                    <div>
+                      <label class="label" for="n-note">Nota</label>
+                      <input id="n-note" class="input" x-model="dayForm.note" maxlength="255" placeholder="Opcional">
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ══════════════════ PANEL: GASTO ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'expense'" x-cloak @keydown.escape.window="sheet === 'expense' && (sheet = null)">
+      <div class="sheet-backdrop" x-show="sheet === 'expense'" x-transition.opacity @click="sheet = null"></div>
+      <form class="sheet" x-show="sheet === 'expense'" @submit.prevent="saveExpense" novalidate role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <template x-if="eForm">
+          <div class="flex min-h-0 flex-col">
+            <div class="sheet-header">
+              <div class="flex-1"><p class="text-lg font-semibold" x-text="editingExpense ? 'Editar gasto' : 'Registrar gasto'"></p>
+                <p class="text-sm text-slate-500" x-text="data ? `${fmt.plate(data.vehicle.plate)} · ${data.vehicle.brand} ${data.vehicle.model}` : ''"></p></div>
+              <button type="button" class="icon-btn" @click="sheet = null" aria-label="Cerrar" x-html="icons.x"></button>
+            </div>
+            <div class="sheet-body space-y-4">
+              <div>
+                <p class="label">Tipo de gasto</p>
+                <div class="grid grid-cols-2 gap-2">
+                  <template x-for="(label, key) in EXPENSE_CATEGORY_NEW" :key="key">
+                    <button type="button" class="rounded-xl border px-3 py-2.5 text-sm font-medium transition"
+                      :class="eForm.category === key ? 'border-navy-900 bg-navy-900 text-white' : 'border-slate-300 text-slate-700'"
+                      @click="eForm.category = key" x-text="label"></button>
+                  </template>
+                </div>
+                <p class="field-error" x-show="fields.category" x-text="fields.category"></p>
+                <a :href="maintenanceUrl()" class="mt-2 flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800" x-show="!editingExpense">
+                  <span x-html="icons.wrenchSm"></span><span class="flex-1">¿Es un mantenimiento o reparación? Regístralo en <b>Mantenimiento</b> (con repuestos y mano de obra); se sumará aquí solo.</span></a>
+                <p class="mt-2 text-xs text-slate-500" x-show="editingExpense?.category === 'mantenimiento' && eForm.category === 'mantenimiento'">Gasto antiguo de tipo Mantenimiento.</p>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="label" for="e-amount">Monto</label>
+                  <div class="relative">
+                    <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-sm font-semibold text-slate-500">S/</span>
+                    <input id="e-amount" class="input pl-9" inputmode="decimal" x-model="eForm.amount" placeholder="0.00" :class="fields.amount && 'input-error'">
+                  </div>
+                  <p class="field-error" x-show="fields.amount" x-text="fields.amount"></p>
+                </div>
+                <div>
+                  <label class="label" for="e-date">Fecha</label>
+                  <input id="e-date" class="input" type="date" :max="data?.today" x-model="eForm.date" :class="fields.date && 'input-error'">
+                  <p class="field-error" x-show="fields.date" x-text="fields.date"></p>
+                </div>
+              </div>
+              <div>
+                <label class="label" for="e-desc">Descripción</label>
+                <input id="e-desc" class="input" x-model="eForm.description" maxlength="255" placeholder="Ej. Lavado, alarma, GPS, multa…" :class="fields.description && 'input-error'">
+                <p class="field-error" x-show="fields.description" x-text="fields.description"></p>
+              </div>
+            </div>
+            <div class="sheet-footer">
+              <button type="button" class="btn btn-danger" x-show="editingExpense && can('records:delete')" @click="deleteExpense" x-html="icons.trash" aria-label="Eliminar gasto"></button>
+              <button type="button" class="btn btn-secondary flex-1" @click="sheet = null">Cancelar</button>
+              <button class="btn btn-primary flex-1" :disabled="saving" x-text="saving ? 'Guardando…' : 'Guardar'"></button>
+            </div>
+          </div>
+        </template>
+      </form>
+    </div>
+
+  </main>
+</body>
+</html>

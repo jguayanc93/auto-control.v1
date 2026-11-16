@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <title>Mi cuenta · AUTO-CONTROL</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <script src="/js/theme.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3/dist/index.global.js"></script>
+  <script type="module" src="/js/pages/cuenta.js"></script>
+</head>
+<body>
+  <main id="page" x-data="page" x-cloak>
+    <div class="mx-auto max-w-xl space-y-4">
+
+      <section class="card flex items-center gap-4 p-5">
+        <div class="flex size-14 shrink-0 items-center justify-center rounded-full bg-brand-600 text-lg font-bold text-white" x-text="avatar"></div>
+        <div class="min-w-0">
+          <p class="truncate text-lg font-semibold" x-text="user.name"></p>
+          <p class="truncate text-sm text-slate-500"><span x-text="'@' + user.username"></span><span x-show="user.email" x-text="' · ' + user.email"></span></p>
+          <p class="mt-1 flex flex-wrap gap-1.5">
+            <span class="pill bg-brand-50 text-brand-700" x-text="roleLabel"></span>
+            <span class="pill bg-slate-100 text-slate-600" x-show="org" x-text="org?.name"></span>
+          </p>
+        </div>
+      </section>
+
+      <form class="card p-5" @submit.prevent="changePassword" novalidate>
+        <h2 class="font-semibold">Cambiar contraseña</h2>
+        <p class="mt-1 text-sm text-slate-500">Al cambiarla se cerrará tu sesión en los demás dispositivos.</p>
+
+        <div class="mt-5 space-y-4">
+          <div>
+            <label class="label" for="current">Contraseña actual</label>
+            <input id="current" type="password" class="input" autocomplete="current-password" x-model="form.currentPassword" :class="fields.currentPassword && 'input-error'">
+            <p class="field-error" x-show="fields.currentPassword" x-text="fields.currentPassword"></p>
+          </div>
+          <div>
+            <label class="label" for="new">Nueva contraseña</label>
+            <input id="new" type="password" class="input" autocomplete="new-password" x-model="form.newPassword" :class="fields.newPassword && 'input-error'">
+            <p class="field-error" x-show="fields.newPassword" x-text="fields.newPassword"></p>
+            <p class="mt-1 text-xs text-slate-500" x-show="!fields.newPassword">Mínimo 8 caracteres.</p>
+          </div>
+          <div>
+            <label class="label" for="confirm">Repite la nueva contraseña</label>
+            <input id="confirm" type="password" class="input" autocomplete="new-password" x-model="form.confirm" :class="fields.confirm && 'input-error'">
+            <p class="field-error" x-show="fields.confirm" x-text="fields.confirm"></p>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-block mt-5" :disabled="saving" x-text="saving ? 'Guardando…' : 'Actualizar contraseña'"></button>
+      </form>
+
+      <button type="button" class="btn btn-danger btn-block" @click="$store.shell.logout()">Cerrar sesión</button>
+    </div>
+  </main>
+</body>
+</html>

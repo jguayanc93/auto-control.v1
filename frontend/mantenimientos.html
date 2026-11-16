@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <title>Mantenimiento · AUTO-CONTROL</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <script src="/js/theme.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3/dist/index.global.js"></script>
+  <script type="module" src="/js/pages/mantenimientos.js"></script>
+</head>
+<body>
+  <main id="page" x-data="page" x-cloak>
+
+    <!-- Encabezado -->
+    <div class="flex items-end justify-between gap-3">
+      <div>
+        <h1 class="page-title">Mantenimiento</h1>
+        <p class="page-sub">Servicios, kilometraje y próximos mantenimientos.</p>
+      </div>
+      <button type="button" class="btn btn-primary hidden lg:inline-flex" @click="openCreate()"><span x-html="icons.plus"></span>Registrar</button>
+    </div>
+
+    <!-- Alerta -->
+    <button type="button" class="mt-4 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm"
+      x-show="attention.overdue || attention.soon" @click="tab = 'proximos'"
+      :class="attention.overdue ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-amber-200 bg-amber-50 text-amber-800'">
+      <span x-html="icons.alert"></span>
+      <span class="flex-1">
+        <b x-show="attention.overdue" x-text="`${attention.overdue} atrasado${attention.overdue === 1 ? '' : 's'}`"></b>
+        <span x-show="attention.overdue && attention.soon"> · </span>
+        <b x-show="attention.soon" x-text="`${attention.soon} próximo${attention.soon === 1 ? '' : 's'}`"></b>
+      </span>
+      <span class="text-xs font-semibold underline" x-show="tab !== 'proximos'">Ver</span>
+    </button>
+
+    <!-- Filtros -->
+    <div class="mt-3 space-y-3" x-show="items.length || expenses.length">
+      <select class="input lg:max-w-xs" x-model="vehicleFilter" aria-label="Filtrar por vehículo">
+        <option value="">Todos los vehículos</option>
+        <template x-for="v in vehicles" :key="v.id"><option :value="v.id" x-text="`${fmt.plate(v.plate)} · ${v.brand} ${v.model}`"></option></template>
+      </select>
+      <div class="grid grid-cols-3 rounded-xl bg-slate-200/60 p-1 text-sm font-semibold lg:max-w-lg">
+        <button type="button" class="rounded-lg py-2 transition" :class="tab === 'proximos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'" @click="tab = 'proximos'">
+          Próximos <span class="opacity-60" x-text="filteredUpcoming.length"></span></button>
+        <button type="button" class="rounded-lg py-2 transition" :class="tab === 'historial' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'" @click="tab = 'historial'">
+          Historial <span class="opacity-60" x-text="byVehicle(items).length"></span></button>
+        <button type="button" class="rounded-lg py-2 leading-tight transition" :class="tab === 'gastos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'" @click="tab = 'gastos'">
+          Gastos por mes</button>
+      </div>
+    </div>
+
+    <!-- Cargando -->
+    <div class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3" x-show="loading">
+      <template x-for="i in 4"><div class="card h-20 animate-pulse bg-slate-200/50"></div></template>
+    </div>
+
+    <!-- Vacío -->
+    <div class="card mt-4 flex flex-col items-center px-6 py-12 text-center" x-show="!loading && !items.length && tab !== 'gastos'">
+      <span class="flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600" x-html="icons.wrench"></span>
+      <p class="mt-4 font-semibold">Aún no hay mantenimientos</p>
+      <p class="mt-1 max-w-xs text-sm text-slate-500">Registra cambios, reparaciones o servicios con su costo de repuestos y mano de obra. Si indicas el próximo km o fecha, te avisaremos.</p>
+      <button type="button" class="btn btn-primary mt-5" @click="openCreate()"><span x-html="icons.plus"></span>Registrar mantenimiento</button>
+    </div>
+
+    <!-- ══════════ PRÓXIMOS ══════════ -->
+    <section x-show="!loading && items.length && tab === 'proximos'">
+      <p class="mt-6 text-center text-sm text-slate-500" x-show="!filteredUpcoming.length">
+        No hay servicios programados. Al registrar un mantenimiento indica el próximo km o fecha.</p>
+      <div class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <template x-for="m in filteredUpcoming" :key="m.id">
+          <button type="button" @click="openDetail(m)" class="card flex items-center gap-3 p-4 text-left transition hover:border-brand-200 active:scale-[.99]">
+            <span class="flex size-11 shrink-0 items-center justify-center rounded-xl" :class="MAINT_STATUS[m.next.status].tone" x-html="icons.wrenchSm"></span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <p class="truncate font-semibold" x-text="m.type"></p>
+                <span class="pill shrink-0 bg-slate-100 font-mono text-slate-700" x-text="fmt.plate(m.vehicle.plate)"></span>
+              </div>
+              <p class="truncate text-xs font-medium" :class="MAINT_STATUS[m.next.status].cls" x-text="fmt.nextText(m.next)"></p>
+              <p class="truncate text-xs text-slate-500" x-text="target(m)"></p>
+            </div>
+            <span class="pill shrink-0" :class="MAINT_STATUS[m.next.status].tone" x-text="MAINT_STATUS[m.next.status].label"></span>
+          </button>
+        </template>
+      </div>
+      <p class="mt-4 text-center text-xs text-slate-500" x-show="filteredUpcoming.length">Avisamos 15 días o 1 000 km antes. El kilometraje se toma del vehículo.</p>
+    </section>
+
+    <!-- ══════════ HISTORIAL ══════════ -->
+    <section x-show="!loading && items.length && tab === 'historial'">
+      <div class="mt-3 flex gap-2">
+        <div class="relative flex-1 lg:max-w-xs">
+          <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-slate-400" x-html="icons.search"></span>
+          <input type="search" x-model="q" placeholder="Buscar servicio, placa o taller…" class="input pl-10" aria-label="Buscar mantenimiento">
+        </div>
+        <a :href="exportUrl" download class="btn btn-secondary shrink-0" title="Descargar en Excel"><span x-html="icons.download"></span>Excel</a>
+      </div>
+      <p class="mt-6 text-center text-sm text-slate-500" x-show="!filteredHistory.length">No hay mantenimientos que coincidan.</p>
+      <template x-for="g in groups" :key="g.month">
+        <div class="mt-5">
+          <div class="mb-2 flex items-baseline justify-between px-1">
+            <p class="text-sm font-semibold capitalize text-slate-700" x-text="fmt.monthLabel(g.month)"></p>
+            <p class="text-xs text-slate-500"><span x-text="`${g.items.length} servicio${g.items.length === 1 ? '' : 's'} · `"></span><b class="text-slate-700" x-text="fmt.money(g.total)"></b></p>
+          </div>
+
+          <!-- Celular: tarjetas -->
+          <div class="grid gap-2 lg:hidden">
+            <template x-for="m in g.items" :key="m.id">
+              <button type="button" @click="openDetail(m)" class="card flex items-center gap-3 px-4 py-3 text-left transition active:scale-[.99]">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <p class="truncate font-semibold" x-text="m.type"></p>
+                    <span class="pill shrink-0 bg-slate-100 font-mono text-slate-700" x-text="fmt.plate(m.vehicle.plate)"></span>
+                  </div>
+                  <p class="truncate text-xs text-slate-500" x-text="[fmt.date(m.doneOn), m.km != null && fmt.km(m.km), m.workshop].filter(Boolean).join(' · ')"></p>
+                  <p class="truncate text-xs text-slate-400" x-show="m.detail" x-text="m.detail"></p>
+                </div>
+                <span class="shrink-0 text-sm font-semibold" x-text="fmt.money(m.cost)"></span>
+              </button>
+            </template>
+          </div>
+
+          <!-- PC: cuadro como el registro en Excel -->
+          <div class="card hidden overflow-x-auto lg:block">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-navy-900 text-xs text-white">
+                <tr>
+                  <th class="px-3 py-2.5 font-semibold">N°</th>
+                  <th class="px-3 py-2.5 font-semibold">Fecha</th>
+                  <th class="px-3 py-2.5 font-semibold">Vehículo / Modelo</th>
+                  <th class="px-3 py-2.5 text-right font-semibold">Kilometraje</th>
+                  <th class="px-3 py-2.5 font-semibold">Tipo de servicio</th>
+                  <th class="px-3 py-2.5 font-semibold">Detalle de reparación / servicio</th>
+                  <th class="px-3 py-2.5 font-semibold">Taller</th>
+                  <th class="px-3 py-2.5 text-right font-semibold">Repuestos</th>
+                  <th class="px-3 py-2.5 text-right font-semibold">Mano de obra</th>
+                  <th class="px-3 py-2.5 text-right font-semibold">Total</th>
+                  <th class="px-3 py-2.5 font-semibold">Próximo mantenimiento</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <template x-for="(m, i) in g.items" :key="m.id">
+                  <tr class="cursor-pointer align-top hover:bg-slate-50" @click="openDetail(m)">
+                    <td class="px-3 py-2.5 text-slate-500" x-text="i + 1"></td>
+                    <td class="whitespace-nowrap px-3 py-2.5" x-text="fmt.date(m.doneOn)"></td>
+                    <td class="px-3 py-2.5"><span class="font-mono font-semibold" x-text="fmt.plate(m.vehicle.plate)"></span>
+                      <span class="block text-xs text-slate-500" x-text="`${m.vehicle.brand} ${m.vehicle.model}`"></span></td>
+                    <td class="whitespace-nowrap px-3 py-2.5 text-right" x-text="fmt.km(m.km)"></td>
+                    <td class="px-3 py-2.5 font-medium" x-text="m.type"></td>
+                    <td class="max-w-56 px-3 py-2.5 text-slate-600" x-text="m.detail || '—'"></td>
+                    <td class="px-3 py-2.5" x-text="m.workshop || '—'"></td>
+                    <td class="whitespace-nowrap px-3 py-2.5 text-right" x-text="fmt.money(m.partsCost)"></td>
+                    <td class="whitespace-nowrap px-3 py-2.5 text-right" x-text="fmt.money(m.laborCost)"></td>
+                    <td class="whitespace-nowrap px-3 py-2.5 text-right font-semibold" x-text="fmt.money(m.cost)"></td>
+                    <td class="px-3 py-2.5">
+                      <span class="block whitespace-nowrap" x-text="target(m) || '—'"></span>
+                      <span class="pill mt-0.5" x-show="m.next.status !== 'sin_programar'" :class="MAINT_STATUS[m.next.status].tone" x-text="MAINT_STATUS[m.next.status].label"></span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+              <tfoot class="border-t-2 border-slate-200 bg-slate-50 font-semibold">
+                <tr>
+                  <td class="px-3 py-2.5" colspan="7">Total del mes</td>
+                  <td class="whitespace-nowrap px-3 py-2.5 text-right" x-text="fmt.money(g.parts)"></td>
+                  <td class="whitespace-nowrap px-3 py-2.5 text-right" x-text="fmt.money(g.labor)"></td>
+                  <td class="whitespace-nowrap px-3 py-2.5 text-right" x-text="fmt.money(g.total)"></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- ══════════ GASTOS POR MES ══════════ -->
+    <section x-show="!loading && tab === 'gastos'">
+      <div class="mt-3 flex justify-end"><a :href="exportUrl" download class="btn btn-secondary"><span x-html="icons.download"></span>Descargar Excel</a></div>
+      <p class="mt-3 text-sm text-slate-500">Lo que generó cada vehículo en el mes: mantenimientos (repuestos + mano de obra) y otros gastos registrados en su calendario de cobros.</p>
+      <p class="mt-6 text-center text-sm text-slate-500" x-show="!monthly.length">Sin gastos registrados.</p>
+      <div class="mt-4 grid gap-4 lg:grid-cols-2">
+        <template x-for="g in monthly" :key="g.month">
+          <div class="card overflow-hidden">
+            <div class="flex items-baseline justify-between bg-slate-50 px-4 py-3">
+              <p class="font-semibold capitalize" x-text="fmt.monthLabel(g.month)"></p>
+              <p class="text-sm font-bold text-rose-600" x-text="fmt.money(g.total)"></p>
+            </div>
+            <table class="w-full text-sm">
+              <thead class="text-xs text-slate-500">
+                <tr class="border-b border-slate-100">
+                  <th class="px-4 py-2 text-left font-medium">Placa</th>
+                  <th class="px-2 py-2 text-right font-medium">Mantenimiento</th>
+                  <th class="px-2 py-2 text-right font-medium">Otros gastos</th>
+                  <th class="px-4 py-2 text-right font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <template x-for="r in g.rows" :key="r.vehicle.id">
+                  <tr>
+                    <td class="px-4 py-2 font-mono font-semibold" x-text="fmt.plate(r.vehicle.plate)"></td>
+                    <td class="px-2 py-2 text-right" x-text="fmt.money(r.maintenance)"></td>
+                    <td class="px-2 py-2 text-right" x-text="fmt.money(r.other)"></td>
+                    <td class="px-4 py-2 text-right font-semibold" x-text="fmt.money(r.total)"></td>
+                  </tr>
+                </template>
+              </tbody>
+              <tfoot x-show="g.rows.length > 1" class="border-t-2 border-slate-200 font-semibold">
+                <tr>
+                  <td class="px-4 py-2">Total</td>
+                  <td class="px-2 py-2 text-right" x-text="fmt.money(g.maintenance)"></td>
+                  <td class="px-2 py-2 text-right" x-text="fmt.money(g.other)"></td>
+                  <td class="px-4 py-2 text-right" x-text="fmt.money(g.total)"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- Botón flotante (celular) -->
+    <button type="button" @click="openCreate()" aria-label="Registrar mantenimiento"
+      class="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 flex size-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 active:scale-95 lg:hidden"
+      x-html="icons.plus"></button>
+
+    <!-- ══════════════════ PANEL: DETALLE ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'detail'" x-cloak @keydown.escape.window="sheet === 'detail' && (sheet = null)">
+      <div class="sheet-backdrop" x-show="sheet === 'detail'" x-transition.opacity @click="sheet = null"></div>
+      <div class="sheet" x-show="sheet === 'detail'" role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <template x-if="current">
+          <div class="flex min-h-0 flex-col">
+            <div class="sheet-header">
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-lg font-semibold" x-text="`${current.type} · ${fmt.plate(current.vehicle.plate)}`"></p>
+                <p class="text-sm text-slate-500" x-text="`${current.vehicle.brand} ${current.vehicle.model}`"></p>
+              </div>
+              <button type="button" class="icon-btn" @click="sheet = null" aria-label="Cerrar" x-html="icons.x"></button>
+            </div>
+            <div class="sheet-body space-y-4">
+              <!-- Próximo servicio -->
+              <div class="rounded-2xl border p-4" :class="current.next.status === 'atrasado' ? 'border-rose-200 bg-rose-50' : current.next.status === 'proximo' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'">
+                <div class="flex items-center justify-between gap-2">
+                  <p class="text-sm font-semibold text-slate-700">Próximo servicio</p>
+                  <span class="pill" :class="MAINT_STATUS[current.next.status].tone" x-text="MAINT_STATUS[current.next.status].label"></span>
+                </div>
+                <template x-if="current.next.status === 'sin_programar'">
+                  <p class="mt-1 text-sm text-slate-500">No se indicó un próximo km ni fecha.</p>
+                </template>
+                <template x-if="current.next.status === 'reemplazado'">
+                  <p class="mt-1 text-sm text-slate-500" x-text="`Ya se registró un ${current.type.toLowerCase()} posterior para este vehículo.`"></p>
+                </template>
+                <template x-if="current.next.status !== 'sin_programar' && current.next.status !== 'reemplazado'">
+                  <div class="mt-1">
+                    <p class="font-semibold" :class="MAINT_STATUS[current.next.status].cls" x-text="fmt.nextText(current.next)"></p>
+                    <p class="text-sm text-slate-600" x-text="target(current)"></p>
+                    <p class="mt-1 text-xs text-slate-500" x-show="current.nextKm != null" x-text="`Kilometraje actual del vehículo: ${fmt.km(current.vehicle.odometer)}`"></p>
+                  </div>
+                </template>
+                <button type="button" class="btn btn-primary btn-block mt-3" x-show="current.next.status === 'atrasado' || current.next.status === 'proximo'" @click="openAgain(current)">
+                  <span x-html="icons.again"></span>Registrar este servicio</button>
+              </div>
+
+              <dl class="divide-y divide-slate-100 rounded-2xl border border-slate-200 text-sm">
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Fecha</dt><dd class="font-medium" x-text="fmt.date(current.doneOn)"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Kilometraje</dt><dd class="font-medium" x-text="fmt.km(current.km)"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Repuestos</dt><dd class="font-medium" x-text="fmt.money(current.partsCost)"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Mano de obra</dt><dd class="font-medium" x-text="fmt.money(current.laborCost)"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="font-semibold">Total</dt><dd class="font-bold" x-text="fmt.money(current.cost)"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Taller</dt><dd class="text-right font-medium" x-text="current.workshop || '—'"></dd></div>
+                <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-500">Registrado por</dt><dd class="text-right font-medium" x-text="`${current.createdBy ?? '—'} · ${fmt.date(current.createdAt)}`"></dd></div>
+                <div class="px-4 py-2.5" x-show="current.detail"><dt class="text-slate-500">Detalle de reparación / servicio</dt><dd class="mt-0.5 whitespace-pre-line" x-text="current.detail"></dd></div>
+              </dl>
+              <button type="button" class="btn btn-secondary btn-block" x-show="current.next.status !== 'atrasado' && current.next.status !== 'proximo'" @click="openAgain(current)">
+                <span x-html="icons.again"></span>Registrar otro igual</button>
+            </div>
+            <div class="sheet-footer" x-show="can('records:edit')">
+              <button type="button" class="btn btn-secondary flex-1" @click="openEdit"><span x-html="icons.edit"></span>Editar</button>
+              <button type="button" class="btn btn-danger" @click="remove" aria-label="Eliminar mantenimiento"><span x-html="icons.trash"></span></button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ══════════════════ PANEL: REGISTRAR / EDITAR ══════════════════ -->
+    <div class="sheet-wrap" x-show="sheet === 'form'" x-cloak @keydown.escape.window="sheet === 'form' && closeForm()">
+      <div class="sheet-backdrop" x-show="sheet === 'form'" x-transition.opacity @click="closeForm"></div>
+      <form class="sheet" x-show="sheet === 'form'" @submit.prevent="save" novalidate role="dialog" aria-modal="true"
+        x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-full lg:translate-y-4 lg:opacity-0"
+        x-transition:leave="transition duration-150 ease-in" x-transition:leave-end="translate-y-full lg:translate-y-4 lg:opacity-0">
+        <div class="sheet-header">
+          <p class="flex-1 text-lg font-semibold" x-text="mode === 'create' ? 'Registrar mantenimiento' : 'Editar mantenimiento'"></p>
+          <button type="button" class="icon-btn" @click="closeForm" aria-label="Cerrar" x-html="icons.x"></button>
+        </div>
+
+        <div class="sheet-body space-y-4">
+          <div x-show="mode === 'create'">
+            <label class="label" for="m-vehicle">Vehículo</label>
+            <select id="m-vehicle" class="input" x-model="form.vehicleId" :class="fields.vehicleId && 'input-error'">
+              <option value="">Selecciona…</option>
+              <template x-for="v in vehicles" :key="v.id"><option :value="v.id" x-text="`${fmt.plate(v.plate)} · ${v.brand} ${v.model}`"></option></template>
+            </select>
+            <p class="field-error" x-show="fields.vehicleId" x-text="fields.vehicleId"></p>
+          </div>
+
+          <div>
+            <label class="label" for="m-type">Tipo de servicio</label>
+            <input id="m-type" class="input" x-model="form.type" maxlength="80" placeholder="Cambio de aceite" :class="fields.type && 'input-error'">
+            <p class="field-error" x-show="fields.type" x-text="fields.type"></p>
+            <div class="-mx-1 mt-2 flex flex-wrap gap-1.5">
+              <template x-for="t in MAINT_TYPES" :key="t">
+                <button type="button" class="rounded-full border px-2.5 py-1 text-xs font-medium transition"
+                  :class="form.type === t ? 'border-navy-900 bg-navy-900 text-white' : 'border-slate-300 text-slate-600'"
+                  @click="form.type = t" x-text="t"></button>
+              </template>
+            </div>
+          </div>
+
+          <div>
+            <label class="label" for="m-detail">Detalle de reparación / servicio <span class="font-normal text-slate-400">(opcional)</span></label>
+            <textarea id="m-detail" class="input h-auto min-h-16 py-2.5" rows="2" x-model="form.detail" maxlength="1000" placeholder="Qué problema tenía y qué se cambió o reparó"></textarea>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="label" for="m-date">Fecha</label>
+              <input id="m-date" class="input" type="date" x-model="form.doneOn" :max="today" :class="fields.doneOn && 'input-error'">
+              <p class="field-error" x-show="fields.doneOn" x-text="fields.doneOn"></p>
+            </div>
+            <div>
+            <label class="label" for="m-km">Kilometraje</label>
+            <input id="m-km" class="input" type="number" inputmode="numeric" min="0" x-model="form.km"
+              :placeholder="formVehicle?.odometer ?? '45000'" :class="fields.km && 'input-error'">
+            <p class="field-error" x-show="fields.km" x-text="fields.km"></p>
+            <p class="mt-1 text-xs text-slate-500" x-show="!fields.km && formVehicle" x-text="formVehicle?.odometer != null ? `Último: ${fmt.km(formVehicle.odometer)}` : 'Sin km registrado'"></p>
+            </div>
+          </div>
+
+          <!-- Costos -->
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="label" for="m-parts">Repuestos</label>
+                <div class="relative">
+                  <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-sm font-semibold text-slate-500">S/</span>
+                  <input id="m-parts" class="input pl-9" inputmode="decimal" x-model="form.partsCost" placeholder="0.00" :class="fields.partsCost && 'input-error'">
+                </div>
+                <p class="field-error" x-show="fields.partsCost" x-text="fields.partsCost"></p>
+              </div>
+              <div>
+                <label class="label" for="m-labor">Mano de obra</label>
+                <div class="relative">
+                  <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-sm font-semibold text-slate-500">S/</span>
+                  <input id="m-labor" class="input pl-9" inputmode="decimal" x-model="form.laborCost" placeholder="0.00" :class="fields.laborCost && 'input-error'">
+                </div>
+                <p class="field-error" x-show="fields.laborCost" x-text="fields.laborCost"></p>
+              </div>
+            </div>
+            <div class="mt-3 flex items-baseline justify-between border-t border-slate-100 pt-3">
+              <span class="text-sm font-semibold text-slate-700">Total</span>
+              <span class="text-lg font-bold" x-text="fmt.money(formTotal)"></span>
+            </div>
+            <p class="mt-1 text-xs text-slate-500">Se suma a los gastos del mes en el calendario de cobros del vehículo.</p>
+          </div>
+
+          <div>
+            <label class="label" for="m-workshop">Taller <span class="font-normal text-slate-400">(opcional)</span></label>
+            <input id="m-workshop" class="input" x-model="form.workshop" maxlength="120" list="m-workshops" autocomplete="off" :class="fields.workshop && 'input-error'">
+            <datalist id="m-workshops"><template x-for="w in workshops" :key="w"><option :value="w"></option></template></datalist>
+          </div>
+
+          <!-- Próximo servicio -->
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-sm font-semibold text-slate-700">Próximo servicio <span class="font-normal text-slate-400">(opcional)</span></p>
+            <p class="text-xs text-slate-500">Indica el km, la fecha o ambos: avisamos lo que llegue primero.</p>
+            <div class="mt-3">
+              <label class="label" for="m-nextkm">A los (km)</label>
+              <input id="m-nextkm" class="input" type="number" inputmode="numeric" min="0" x-model="form.nextKm" placeholder="50000" :class="fields.nextKm && 'input-error'">
+              <p class="field-error" x-show="fields.nextKm" x-text="fields.nextKm"></p>
+              <div class="mt-2 flex gap-1.5">
+                <template x-for="n in [5000, 10000]" :key="n">
+                  <button type="button" class="rounded-full border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600" @click="addKm(n)" x-text="`+${fmt.km(n)}`"></button>
+                </template>
+              </div>
+            </div>
+            <div class="mt-3">
+              <label class="label" for="m-nextdate">Fecha</label>
+              <input id="m-nextdate" class="input" type="date" x-model="form.nextDate" :class="fields.nextDate && 'input-error'">
+              <p class="field-error" x-show="fields.nextDate" x-text="fields.nextDate"></p>
+              <div class="mt-2 flex gap-1.5">
+                <template x-for="o in [[3, '+3 meses'], [6, '+6 meses'], [12, '+1 año']]" :key="o[0]">
+                  <button type="button" class="rounded-full border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600" @click="addMonths(o[0])" x-text="o[1]"></button>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet-footer">
+          <button type="button" class="btn btn-secondary flex-1" @click="closeForm">Cancelar</button>
+          <button class="btn btn-primary flex-1" :disabled="saving" x-text="saving ? 'Guardando…' : 'Guardar'"></button>
+        </div>
+      </form>
+    </div>
+
+  </main>
+</body>
+</html>

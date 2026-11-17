@@ -112,14 +112,30 @@ sudo ss -ltnp | grep 5432
 
 ## 2. Node 24 con nvm (solo para AUTO-CONTROL)
 
+Antes de instalar, anota qué Node usan hoy tus otros proyectos:
+
 ```bash
+node -v ; which node    # p. ej. v20.16.0 en /root/.nvm/... (nvm) o /usr/bin/node (sistema)
+```
+
+```bash
+# solo si "which node" NO estaba dentro de ~/.nvm:
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 source ~/.bashrc
+
 nvm install 24
 node -v                 # → v24.x
 ```
 
-> `nvm install` no reemplaza el Node 20 del sistema (`/usr/bin/node`); las otras apps siguen igual.
+**Importante:** `nvm install 24` deja la 24 como versión por defecto. Devuélvela a la que anotaste,
+para que tus otros proyectos (y su `pm2`) sigan igual; `deploy.sh` activa la 24 solo para AUTO-CONTROL:
+
+```bash
+nvm alias default 20.16.0     # si tu Node 20 era de nvm (pon la versión que anotaste)
+# nvm alias default system    # en cambio, si era /usr/bin/node
+nvm use default
+node -v ; pm2 ls              # tu versión de antes y tus proyectos
+```
 
 PM2: el servidor **ya lo tiene** (paso 0), no se instala otro. Solo si `which pm2` no mostró nada:
 
@@ -287,4 +303,6 @@ Entra con `cvaca` y crea el primer negocio.
 - **"Service Unavailable" (503):** la API no está corriendo → `pm2 logs autocontrol-api`.
 - **No deja iniciar sesión:** estás entrando por `http://`; usa `https://` (paso 8).
 - **`deploy.sh` dice "Se necesita Node 24":** `nvm install 24` y vuelve a ejecutarlo.
+- **`pm2: command not found` pero tus apps siguen corriendo:** la versión por defecto de nvm cambió.
+  `nvm alias default <versión donde está pm2>` (ver `ls -d ~/.nvm/versions/node/*/bin/pm2`) y `nvm use default`.
 - **La API no arranca y el log dice "Configuración inválida":** revisa `backend/.env` (el mensaje indica qué variable).

@@ -13,14 +13,27 @@ NODE_MAJOR=24
 # Se puede forzar con:  PM2_BIN=/ruta/a/pm2 ./deploy/deploy.sh
 PM2="${PM2_BIN:-$(command -v pm2 || true)}"
 
-# Node 24 de nvm (sin tocar el Node del sistema)
+echo "▶ Preparando Node $NODE_MAJOR (usuario: $(whoami))…"
+
+# Node 24 de nvm (sin tocar el Node del sistema).
+# nvm.sh no es compatible con "set -eu": se carga con esas opciones desactivadas y con --no-use
+# (si no, al cargarse intenta activar la versión "default" y corta el script en silencio con código 3).
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 if [ -s "$NVM_DIR/nvm.sh" ]; then
+  set +eu
   # shellcheck disable=SC1091
-  . "$NVM_DIR/nvm.sh"
+  . "$NVM_DIR/nvm.sh" --no-use
   nvm use "$NODE_MAJOR" >/dev/null
+  NVM_RC=$?
+  set -eu
+  if [ "$NVM_RC" -ne 0 ]; then
+    echo "✖ nvm no tiene Node $NODE_MAJOR para el usuario $(whoami) ($NVM_DIR). Instálalo con: nvm install $NODE_MAJOR" >&2
+    exit 1
+  fi
+else
+  echo "ℹ No se encontró nvm en $NVM_DIR; se usará el node del PATH." >&2
 fi
-NODE_VERSION="$(node -v)"
+NODE_VERSION="$(node -v 2>/dev/null || echo ninguno)"
 case "$NODE_VERSION" in
   "v$NODE_MAJOR".*) ;;
   *) echo "✖ Se necesita Node $NODE_MAJOR (hay $NODE_VERSION). Instálalo con: nvm install $NODE_MAJOR" >&2; exit 1 ;;

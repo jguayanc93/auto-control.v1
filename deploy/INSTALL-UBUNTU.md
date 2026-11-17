@@ -77,6 +77,23 @@ sudo apt install -y postgresql-16
 psql --version          # → psql (PostgreSQL) 16.x
 ```
 
+Comprobar que quedó encendido (debe decir `16 main 5432 online`):
+
+```bash
+pg_lsclusters
+```
+
+> **Si dice `down`** y el log (`sudo tail -n 30 /var/log/postgresql/postgresql-16-main.log`) muestra
+> *"el archivo de llave privada «/etc/ssl/private/ssl-cert-snakeoil.key» debe ser de propiedad del usuario
+> de base de datos o root"*: desactiva el SSL de PostgreSQL (solo recibe conexiones locales, no lo necesita).
+> **No** cambies los permisos de esa llave: otros servicios del servidor pueden depender de ella.
+>
+> ```bash
+> sudo sed -i "s/^ssl = on/ssl = off/" /etc/postgresql/16/main/postgresql.conf
+> sudo systemctl start postgresql@16-main
+> pg_lsclusters
+> ```
+
 Crear el usuario y la base de datos de la app:
 
 ```bash
